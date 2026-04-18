@@ -13,7 +13,7 @@ export default defineConfig({
         name: 'TerraWatch',
         short_name: 'TerraWatch',
         description: 'Environmental intelligence for where you are and where you are going.',
-        theme_color: '#0B1220',
+        theme_color: '#10B981',
         background_color: '#0B1220',
         display: 'standalone',
         start_url: '/',

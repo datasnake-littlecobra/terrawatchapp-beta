@@ -36,7 +36,7 @@ function ensureMap() {
     attributionControl: false,
     interactive: false,
   })
-  new maplibregl.Marker({ color: '#3FA9F5' })
+  new maplibregl.Marker({ color: '#10B981' })
     .setLngLat([coords.value.lon, coords.value.lat])
     .addTo(map.value)
 }
