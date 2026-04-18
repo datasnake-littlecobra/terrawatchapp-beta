@@ -1,0 +1,16 @@
+node_modules
+dist
+dist-ssr
+.DS_Store
+*.log
+.env
+.env.local
+.vite
+.eslintcache
+coverage
+android/app/build
+android/build
+android/.gradle
+ios/App/build
+ios/App/Pods
+ios/App/DerivedData
