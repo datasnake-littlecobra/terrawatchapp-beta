@@ -1,136 +1,101 @@
-# Deploying TerraWatch to Hostinger
+# Deploying TerraWatch
 
-This project auto-deploys on every push to `main` or `claude/terrawatch-redesign-dMM0l` via **GitHub Actions → FTP → Hostinger**. The workflow is defined in `.github/workflows/deploy.yml`.
+**Stack at a glance**
 
-## Identifying your Hostinger plan
+- **Frontend**: Cloudflare Workers (Static Assets) — auto-builds on every push via the Cloudflare ↔ GitHub integration. Wrangler config lives at `wrangler.jsonc`.
+- **Backend**: Supabase — Postgres + Auth + Edge Functions (`ask-terra`).
+- **Domain**: `terrawatchapp.com` registered at Hostinger's domain registrar. DNS is delegated to Cloudflare so the custom domain can attach to the Worker.
 
-1. Open `https://hpanel.hostinger.com`.
-2. In the top-left card, look at the plan label: **Single**, **Premium**, **Business**, **Cloud Startup/Pro**, or **VPS (KVM 1/2/4/8)**.
-3. Cross-check at **Billing → Subscriptions** for the exact line item.
+There is **no Hostinger web-hosting plan** involved. The Hostinger account is used only for domain registration.
 
-### Which path do you use?
+## Cloudflare Workers (frontend)
 
-| Plan | Recommended deploy | Why |
-| --- | --- | --- |
-| Single, Premium | **GitHub Actions → FTP** (this workflow) | FTP is the only server access these plans give. |
-| Business, Cloud Startup/Pro | Either GitHub Actions → FTP **or** hPanel's native Git deploy | Business+ plans have GitHub auto-deploy built into hPanel — zero workflow file needed. |
-| VPS (KVM) | GitHub Actions → SSH/rsync | Fastest, and the same server can host the Supabase Edge Functions / Stripe webhooks once Ask Terra Pro ships. |
+### One-time setup
 
-If you're on Business/Cloud and want to swap to hPanel's native Git integration instead of this FTP workflow, tell me and I'll strip the Action. If you move to VPS later (e.g., to host the Ask Terra backend), I'll switch the workflow to SSH/rsync.
+1. **Install the Cloudflare GitHub App** — `github.com/settings/installations` → grant access to `datasnake-littlecobra/terrawatchapp-beta`.
+2. **Create the Worker** — `dash.cloudflare.com` → **Workers & Pages** → **Create** → **Import a repository** → pick `terrawatchapp-beta`. When prompted:
+   - **Project name**: `terrawatchapp-beta` (becomes the default URL, `terrawatchapp-beta.<account>.workers.dev`).
+   - **Framework preset**: `Vue` (auto-detected).
+   - **Build command**: `npm run build`
+   - **Build output directory**: `dist`
+   - **Deploy command**: `npx wrangler deploy` (auto-set; reads `wrangler.jsonc`).
+   - **Production branch**: `main` (or `claude/terrawatch-redesign-dMM0l` until merged).
+3. **Add env vars** — Worker → **Settings → Variables and Secrets → Add**:
 
-## One-time setup (FTP path — this workflow)
+   | Name | Value | Type | Notes |
+   | --- | --- | --- | --- |
+   | `VITE_SUPABASE_URL` | `https://<ref>.supabase.co` | Plaintext | Baked into the bundle at build time. |
+   | `VITE_SUPABASE_ANON_KEY` | anon key from Supabase → Settings → API | Plaintext | Public by design — RLS scopes access. |
+   | `NODE_VERSION` | `22` | Plaintext | Pin the build Node. |
 
-### 1. Create an FTP account in hPanel
+   `VITE_*` vars are read at build time, so after changing them trigger a redeploy: Worker → **Deployments** → **Retry deployment**.
 
-1. hPanel → **Files → FTP Accounts**.
-2. Note the **FTP hostname** (typically `ftp.<yourdomain>` or `files.<cluster>.main-hosting.eu`).
-3. Create a new account or use the auto-created one. Set its home directory to `/public_html` (or to a subdomain's root if you're deploying to `app.yourdomain.com`).
-4. Save the **username** and **password**.
+4. **Trigger the first deploy** — push to the production branch, or hit **Deployments → Create deployment** in the dashboard. The build log should end with `wrangler versions upload` succeeding and a URL like `terrawatchapp-beta.<account>.workers.dev`.
 
-### 2. Add the secrets to GitHub
+### Wrangler config
 
-Repo → **Settings → Secrets and variables → Actions → New repository secret**:
+`wrangler.jsonc` at repo root:
 
-| Secret name | Value |
-| --- | --- |
-| `HOSTINGER_FTP_HOST` | e.g. `ftp.terrawatchapp.com` |
-| `HOSTINGER_FTP_USER` | FTP username from step 1 |
-| `HOSTINGER_FTP_PASSWORD` | FTP password from step 1 |
+```jsonc
+{
+  "name": "terrawatchapp-beta",
+  "compatibility_date": "2026-04-19",
+  "assets": {
+    "directory": "./dist",
+    "not_found_handling": "single-page-application"
+  }
+}
+```
 
-### 3. (Optional) Add non-secret variables
+- `assets.directory: "./dist"` — serves the Vite build output.
+- `not_found_handling: "single-page-application"` — any path that doesn't match a file returns `index.html` with a 200. This is what lets `/travel`, `/explore?view=list`, `/bookmarks`, etc. deep-link correctly. No `_redirects` or `.htaccess` file needed.
 
-Repo → **Settings → Secrets and variables → Actions → Variables** tab:
+### Custom domain (`terrawatchapp.com`)
 
-| Variable | Default | When to override |
-| --- | --- | --- |
-| `HOSTINGER_FTP_PATH` | `/public_html/` | Set to `/public_html/app/` if you want the SPA at a sub-path, or `/domains/app.terrawatchapp.com/public_html/` for a subdomain. |
-| `HOSTINGER_FTP_PROTOCOL` | `ftps` | Keep `ftps` unless Hostinger explicitly requires plain `ftp`. Never use plain FTP on shared networks. |
-| `HOSTINGER_FTP_PORT` | `21` | Change only if Hostinger tells you to. |
+Attaching a custom domain to a Cloudflare Worker requires the zone (domain) to be on Cloudflare DNS. The domain stays registered at Hostinger — only the nameservers change.
 
-### 4. Point DNS at Hostinger
+1. **Add the zone in Cloudflare** — `dash.cloudflare.com` → **+ Add a Site** → enter `terrawatchapp.com` → pick the **Free** plan → Cloudflare auto-scans existing DNS records and returns two nameservers like `x.ns.cloudflare.com` and `y.ns.cloudflare.com`.
+2. **Switch nameservers at Hostinger** — `hpanel.hostinger.com` → **Domain Portfolio** → `terrawatchapp.com` → **Nameservers** → **Change nameservers** → **Use custom** → paste Cloudflare's two. Propagation is usually ~15 min, up to 24h.
+3. **Verify** — once `dash.cloudflare.com` marks the zone as **Active**, proceed.
+4. **Attach to the Worker** — Worker → **Settings → Domains & Routes → Add Custom Domain**:
+   - `terrawatchapp.com`
+   - `www.terrawatchapp.com`
 
-If your domain isn't already on Hostinger:
+   Cloudflare auto-issues a Universal SSL cert (takes a few minutes).
 
-- **Domain on Hostinger, hosting on Hostinger**: nothing to do. DNS is automatic.
-- **Domain elsewhere**: add these records at your registrar, per hPanel → **Hosting → Details**:
-  - `A` record `@` → Hostinger's shared IP shown in hPanel.
-  - `CNAME` record `www` → your root domain.
+### Preview deploys
 
-Wait up to 24 h for propagation (usually ~15 min).
-
-### 5. Trigger the first deploy
-
-- Push anything to `main` (or the active feature branch), **or**
-- GitHub → Actions → **Deploy to Hostinger** → **Run workflow**.
-
-The job runs typecheck + tests + build, then uploads `dist/` via FTPS.
-
-## What the workflow does
-
-1. Checks out the branch.
-2. Installs dependencies (with npm cache).
-3. Runs `npm run typecheck` and `npm run test`. A failure here aborts the deploy — broken code never reaches production.
-4. Runs `npm run build`.
-5. Writes an `.htaccess` into `dist/` so Apache rewrites all unknown paths to `/index.html` (required for Vue Router's HTML5 history mode). Also sets cache headers and gzip.
-6. Uploads `dist/` to Hostinger over FTPS. `SamKirkland/FTP-Deploy-Action` only transfers changed files, so incremental deploys are fast.
-
-## Alternative: Hostinger's native Git integration (Business / Cloud plans)
-
-If you'd rather let Hostinger pull from GitHub directly:
-
-1. hPanel → **Websites → <your site> → Advanced → GIT**.
-2. Click **Create new repository**, paste your GitHub HTTPS URL, pick the branch.
-3. Set **Install path** to `public_html`.
-4. Hostinger doesn't run `npm run build` server-side on shared plans — so in this mode you need to commit the built `dist/` to a deploy branch, or keep the GitHub Action and treat Hostinger Git as a fallback.
-
-For this reason, **the GitHub Actions → FTP workflow above is the recommended default**, even on Business/Cloud plans, unless you move to a VPS.
-
-## Preview / staging
-
-If you want a staging URL (e.g. `staging.terrawatchapp.com`):
-
-1. Create a subdomain in hPanel → **Domains → Subdomains**.
-2. Add a second FTP account scoped to that subdomain's directory, and a second set of GitHub secrets (`HOSTINGER_FTP_HOST_STAGING`, etc.).
-3. Duplicate the workflow as `deploy-staging.yml` on push to a `staging` branch. I can wire this when you ask for it.
-
-## Troubleshooting
-
-- **FTP 530 Login incorrect** → username is usually `user@yourdomain.com`, not just `user`. Re-check hPanel → Files → FTP Accounts.
-- **`ENOTFOUND` on the host** → host needs to be the FTP hostname (starts with `ftp.` or `files.`), not the web domain.
-- **Page loads but sub-routes 404** → `.htaccess` didn't upload. Check FTP logs in the Action; confirm `public_html/.htaccess` exists.
-- **Service worker caches old build** → `vite-plugin-pwa` is set to `autoUpdate`; a hard reload clears it. If users report stale content, we can ship a small "new version available" toast; tell me and I'll add it.
+Every push to a non-production branch gets a preview URL automatically (shown on the Worker's **Deployments** tab). Useful for review before merging into `main`.
 
 ## Supabase (auth + bookmarks + Ask Terra)
 
 The app reads Supabase credentials from two build-time environment variables:
 
-| Var | Where it lives | Visibility |
-| --- | --- | --- |
-| `VITE_SUPABASE_URL` | GitHub Actions → Variables | Public (baked into the bundle) |
-| `VITE_SUPABASE_ANON_KEY` | GitHub Actions → Variables | Public by design (RLS scopes it) |
+| Var | Visibility |
+| --- | --- |
+| `VITE_SUPABASE_URL` | Public (baked into the bundle) |
+| `VITE_SUPABASE_ANON_KEY` | Public by design — RLS scopes it |
 
-Get both from Supabase → Project Settings → API. Add them under **Settings → Secrets and variables → Actions → Variables** (not Secrets — these are safe to expose).
-
-For local dev, copy `.env.example` to `.env.local` and fill them in.
+Get both from Supabase → **Project Settings → API**. Set them in **Cloudflare Worker → Settings → Variables and Secrets** (see table above). For local dev, copy `.env.example` to `.env.local` and fill them in.
 
 ### One-time Supabase setup
 
-1. Run the migration: `supabase/migrations/0001_auth_bookmarks_asktq.sql` — creates the `bookmarks` and `ask_terra_usage` tables with RLS. You can apply it via `supabase db push` (CLI) or by pasting the SQL into the Supabase SQL editor.
-2. Enable magic-link auth: Supabase → Authentication → Providers → Email → make sure "Email link" is on. Optionally disable "Confirm email" if you want a one-tap flow.
-3. Add the app's URLs to Authentication → URL Configuration:
-   - Site URL: `https://terrawatchapp.com` (or wherever it ships)
-   - Redirect URLs: `https://terrawatchapp.com/auth/callback` + `http://localhost:5173/auth/callback`
+1. **Run the migration**: `supabase/migrations/0001_auth_bookmarks_asktq.sql` — creates the `bookmarks` and `ask_terra_usage` tables with RLS. Apply via `supabase db push` (CLI) or paste into Supabase → SQL Editor.
+2. **Enable magic-link auth**: Supabase → **Authentication → Providers → Email** → ensure **Email link** is on. Optionally disable "Confirm email" for a one-tap flow.
+3. **Add the app's URLs** under Authentication → **URL Configuration**:
+   - Site URL: `https://terrawatchapp.com`
+   - Redirect URLs: `https://terrawatchapp.com/auth/callback`, `https://terrawatchapp-beta.<account>.workers.dev/auth/callback`, `http://localhost:5173/auth/callback`
 
 ### Ask Terra edge function
 
-The `supabase/functions/ask-terra/` function proxies Anthropic Claude so the API key never touches the client. It requires two secrets set **in Supabase** (not in GitHub):
+`supabase/functions/ask-terra/` proxies Anthropic Claude so the API key never touches the client. It needs two secrets set **in Supabase** (not in Cloudflare):
 
 ```bash
 supabase secrets set ANTHROPIC_API_KEY=sk-ant-...
 # SUPABASE_SERVICE_ROLE_KEY is set automatically by the platform.
 ```
 
-Optionally tune the daily per-user limit (default 5):
+Optionally tune the daily per-user quota (default 5):
 
 ```bash
 supabase secrets set ASK_TERRA_DAILY_LIMIT=10
@@ -138,11 +103,29 @@ supabase secrets set ASK_TERRA_DAILY_LIMIT=10
 
 ### Auto-deploying the edge function
 
-The workflow `.github/workflows/deploy-edge-functions.yml` redeploys `ask-terra` whenever files under `supabase/functions/**` change. It needs two GitHub Secrets:
+`.github/workflows/deploy-edge-functions.yml` redeploys `ask-terra` whenever files under `supabase/functions/**` change. It needs two GitHub Secrets (Repo → **Settings → Secrets and variables → Actions → Secrets**):
 
 | Secret | How to get it |
 | --- | --- |
-| `SUPABASE_ACCESS_TOKEN` | Supabase → Account → Access Tokens → Generate new token |
+| `SUPABASE_ACCESS_TOKEN` | Supabase → **Account → Access Tokens → Generate new token** |
 | `SUPABASE_PROJECT_REF` | The 20-character project ref in your project URL (`https://<ref>.supabase.co`) |
 
-Once both secrets are set, any edit to the function file triggers a redeploy with no manual step.
+Once both are set, any edit to the function file triggers a redeploy with no manual step.
+
+## Troubleshooting
+
+- **`Missing entry-point to Worker script or to assets directory`** — `wrangler.jsonc` missing or malformed. Make sure the file exists at repo root and contains the `assets.directory` field.
+- **Deep link returns 404 on hard refresh** — `not_found_handling: "single-page-application"` missing from `wrangler.jsonc`.
+- **Build succeeds but sign-in silently fails** — `VITE_SUPABASE_*` env vars weren't set before the build. `VITE_*` vars are baked in at build time; set them in Worker settings and **Retry deployment**.
+- **Custom domain shows "SSL pending"** — normal for the first ~5 minutes after attaching. If it's still pending after an hour, confirm the zone status is **Active** and the nameserver change actually propagated (`dig NS terrawatchapp.com`).
+- **Service worker caches old build** — `vite-plugin-pwa` is set to `autoUpdate`; a hard reload clears it. If stale builds become a pattern we can add a "new version available" toast.
+
+## Migrating away from the old Hostinger FTP workflow
+
+The repo still contains `.github/workflows/deploy.yml` (Hostinger FTP deploy) from Phase 7. Once the Cloudflare deploy is confirmed green on a production push:
+
+1. Delete `.github/workflows/deploy.yml`.
+2. Delete the `HOSTINGER_FTP_*` GitHub secrets (Repo → **Settings → Secrets and variables → Actions**) — harmless if left but confusing.
+3. The `VITE_SUPABASE_*` GitHub Actions **Variables** (not secrets) can also be removed, since Cloudflare reads its own copies from Worker settings.
+
+Leave `.github/workflows/deploy-edge-functions.yml` in place — that one handles Supabase Edge Functions and is orthogonal to where the frontend is hosted.
