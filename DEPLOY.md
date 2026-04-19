@@ -99,3 +99,50 @@ If you want a staging URL (e.g. `staging.terrawatchapp.com`):
 - **`ENOTFOUND` on the host** → host needs to be the FTP hostname (starts with `ftp.` or `files.`), not the web domain.
 - **Page loads but sub-routes 404** → `.htaccess` didn't upload. Check FTP logs in the Action; confirm `public_html/.htaccess` exists.
 - **Service worker caches old build** → `vite-plugin-pwa` is set to `autoUpdate`; a hard reload clears it. If users report stale content, we can ship a small "new version available" toast; tell me and I'll add it.
+
+## Supabase (auth + bookmarks + Ask Terra)
+
+The app reads Supabase credentials from two build-time environment variables:
+
+| Var | Where it lives | Visibility |
+| --- | --- | --- |
+| `VITE_SUPABASE_URL` | GitHub Actions → Variables | Public (baked into the bundle) |
+| `VITE_SUPABASE_ANON_KEY` | GitHub Actions → Variables | Public by design (RLS scopes it) |
+
+Get both from Supabase → Project Settings → API. Add them under **Settings → Secrets and variables → Actions → Variables** (not Secrets — these are safe to expose).
+
+For local dev, copy `.env.example` to `.env.local` and fill them in.
+
+### One-time Supabase setup
+
+1. Run the migration: `supabase/migrations/0001_auth_bookmarks_asktq.sql` — creates the `bookmarks` and `ask_terra_usage` tables with RLS. You can apply it via `supabase db push` (CLI) or by pasting the SQL into the Supabase SQL editor.
+2. Enable magic-link auth: Supabase → Authentication → Providers → Email → make sure "Email link" is on. Optionally disable "Confirm email" if you want a one-tap flow.
+3. Add the app's URLs to Authentication → URL Configuration:
+   - Site URL: `https://terrawatchapp.com` (or wherever it ships)
+   - Redirect URLs: `https://terrawatchapp.com/auth/callback` + `http://localhost:5173/auth/callback`
+
+### Ask Terra edge function
+
+The `supabase/functions/ask-terra/` function proxies Anthropic Claude so the API key never touches the client. It requires two secrets set **in Supabase** (not in GitHub):
+
+```bash
+supabase secrets set ANTHROPIC_API_KEY=sk-ant-...
+# SUPABASE_SERVICE_ROLE_KEY is set automatically by the platform.
+```
+
+Optionally tune the daily per-user limit (default 5):
+
+```bash
+supabase secrets set ASK_TERRA_DAILY_LIMIT=10
+```
+
+### Auto-deploying the edge function
+
+The workflow `.github/workflows/deploy-edge-functions.yml` redeploys `ask-terra` whenever files under `supabase/functions/**` change. It needs two GitHub Secrets:
+
+| Secret | How to get it |
+| --- | --- |
+| `SUPABASE_ACCESS_TOKEN` | Supabase → Account → Access Tokens → Generate new token |
+| `SUPABASE_PROJECT_REF` | The 20-character project ref in your project URL (`https://<ref>.supabase.co`) |
+
+Once both secrets are set, any edit to the function file triggers a redeploy with no manual step.

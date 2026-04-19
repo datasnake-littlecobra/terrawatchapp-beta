@@ -36,6 +36,9 @@ jobs:
         run: npm run test
 
       - name: Build
+        env:
+          VITE_SUPABASE_URL: ${{ vars.VITE_SUPABASE_URL }}
+          VITE_SUPABASE_ANON_KEY: ${{ vars.VITE_SUPABASE_ANON_KEY }}
         run: npm run build
 
       # Ensure SPA deep-links work on Hostinger's Apache (redirect unknown paths to index.html).

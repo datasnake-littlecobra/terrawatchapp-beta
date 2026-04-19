@@ -5,14 +5,19 @@ import { en } from '@/i18n/en'
 
 const route = useRoute()
 const items = [
-  { to: '/', key: 'home', label: en.nav.home, icon: 'home' },
-  { to: '/explore', key: 'explore', label: en.nav.explore, icon: 'map' },
-  { to: '/travel', key: 'travel', label: en.nav.travel, icon: 'compass' },
-  { to: '/alerts', key: 'alerts', label: en.nav.alerts, icon: 'bell' },
-  { to: '/settings', key: 'more', label: en.nav.more, icon: 'more' },
+  { to: '/', key: 'home', label: en.nav.home, icon: 'home', matchPrefix: false },
+  { to: '/explore', key: 'explore', label: en.nav.explore, icon: 'map', matchPrefix: true },
+  { to: '/travel', key: 'travel', label: en.nav.travel, icon: 'compass', matchPrefix: true },
+  { to: '/bookmarks', key: 'bookmarks', label: 'Saved', icon: 'star', matchPrefix: true },
+  { to: '/settings', key: 'more', label: en.nav.more, icon: 'more', matchPrefix: true },
 ] as const
 
 const active = computed(() => route.path)
+
+function isActive(item: (typeof items)[number]): boolean {
+  if (!item.matchPrefix) return active.value === item.to
+  return active.value === item.to || active.value.startsWith(`${item.to}/`)
+}
 </script>
 
 <template>
@@ -28,11 +33,7 @@ const active = computed(() => route.path)
           :to="item.to"
           class="flex flex-col items-center justify-center py-3 text-[11px] tracking-wide
                  text-ink-muted hover:text-ink-primary transition-colors"
-          :class="
-            (item.to === '/' ? active === '/' : active.startsWith(item.to))
-              ? 'text-accent'
-              : ''
-          "
+          :class="isActive(item) ? 'text-accent' : ''"
         >
           <span class="block w-6 h-6 mb-1" :aria-hidden="true">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"
@@ -46,8 +47,8 @@ const active = computed(() => route.path)
               <template v-else-if="item.icon === 'compass'">
                 <circle cx="12" cy="12" r="9" /><path d="m15 9-4 2-2 4 4-2 2-4Z" />
               </template>
-              <template v-else-if="item.icon === 'bell'">
-                <path d="M6 8a6 6 0 0 1 12 0c0 7 3 8 3 8H3s3-1 3-8Z" /><path d="M10 21a2 2 0 0 0 4 0" />
+              <template v-else-if="item.icon === 'star'">
+                <path d="m12 3 2.9 6 6.6 1-4.8 4.6 1.2 6.6L12 18l-5.9 3.2 1.2-6.6L2.5 10l6.6-1L12 3Z" />
               </template>
               <template v-else>
                 <circle cx="5" cy="12" r="1" /><circle cx="12" cy="12" r="1" /><circle cx="19" cy="12" r="1" />
