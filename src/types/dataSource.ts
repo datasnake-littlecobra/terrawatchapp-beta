@@ -9,7 +9,7 @@ export interface DataSource<Req, Res> {
   fetch(req: Req): Promise<Res>
 }
 
-export type FeedEventKind = 'seismic' | 'weather' | 'space' | 'tide'
+export type FeedEventKind = 'seismic' | 'weather' | 'space' | 'tide' | 'ufo' | 'datasnake'
 
 export interface FeedEvent {
   id: string

@@ -1,4 +1,4 @@
-name: Deploy Supabase Edge Functions
+name: Deploy Supabase (migrations + edge functions)
 
 on:
   push:
@@ -6,19 +6,24 @@ on:
       - main
       - claude/terrawatch-redesign-dMM0l
     paths:
+      - 'supabase/migrations/**'
       - 'supabase/functions/**'
       - '.github/workflows/deploy-edge-functions.yml'
   workflow_dispatch:
 
 concurrency:
-  group: supabase-functions-${{ github.ref }}
+  group: supabase-deploy-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
   deploy:
-    name: Deploy edge functions
+    name: Apply migrations and deploy functions
     runs-on: ubuntu-latest
     environment: production
+    env:
+      SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+      SUPABASE_PROJECT_REF: ${{ secrets.SUPABASE_PROJECT_REF }}
+      SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -29,11 +34,15 @@ jobs:
           version: latest
 
       - name: Link project
-        env:
-          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
-        run: supabase link --project-ref ${{ secrets.SUPABASE_PROJECT_REF }}
+        run: supabase link --project-ref "$SUPABASE_PROJECT_REF"
+
+      - name: Apply database migrations
+        run: supabase db push --password "$SUPABASE_DB_PASSWORD"
 
       - name: Deploy ask-terra
-        env:
-          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
         run: supabase functions deploy ask-terra --no-verify-jwt=false
+
+      - name: Deploy ingest-events
+        # Authenticated by shared secret (x-ingest-secret), not the Supabase
+        # JWT — so the GitHub Actions cron can invoke it without a user token.
+        run: supabase functions deploy ingest-events --no-verify-jwt=true

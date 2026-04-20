@@ -1,0 +1,46 @@
+name: Ingest events (cron)
+
+# Pings the `ingest-events` Supabase edge function on a 10-minute schedule.
+# The function pulls from USGS, NWS, and NOAA SWPC and upserts into the
+# `events` table. Auth is a shared secret (`x-ingest-secret`) so the run
+# doesn't need a user JWT. On-demand runs: Actions tab → Ingest events (cron)
+# → Run workflow.
+
+on:
+  schedule:
+    - cron: '*/10 * * * *'
+  workflow_dispatch:
+
+concurrency:
+  group: ingest-events
+  cancel-in-progress: false
+
+jobs:
+  ingest:
+    name: Trigger ingest
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Call ingest-events
+        env:
+          SUPABASE_PROJECT_REF: ${{ secrets.SUPABASE_PROJECT_REF }}
+          INGEST_SECRET: ${{ secrets.INGEST_SECRET }}
+        run: |
+          set -euo pipefail
+          if [ -z "$SUPABASE_PROJECT_REF" ] || [ -z "$INGEST_SECRET" ]; then
+            echo "Missing SUPABASE_PROJECT_REF or INGEST_SECRET secret" >&2
+            exit 1
+          fi
+          URL="https://${SUPABASE_PROJECT_REF}.supabase.co/functions/v1/ingest-events"
+          echo "POST ${URL}"
+          HTTP_STATUS=$(curl -sS -o /tmp/ingest.out -w '%{http_code}' \
+            -X POST "$URL" \
+            -H "x-ingest-secret: ${INGEST_SECRET}" \
+            -H "content-type: application/json" \
+            --data '{}')
+          echo "HTTP $HTTP_STATUS"
+          cat /tmp/ingest.out
+          echo
+          if [ "$HTTP_STATUS" -ge 300 ]; then
+            exit 1
+          fi

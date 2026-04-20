@@ -39,6 +39,8 @@ export const en = {
       weather: 'Weather',
       space: 'Space',
       tide: 'Tide',
+      ufo: 'UAP',
+      datasnake: 'DataSnake',
     } as const,
     filter: { all: 'All' },
   },

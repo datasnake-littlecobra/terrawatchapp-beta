@@ -101,16 +101,61 @@ Optionally tune the daily per-user quota (default 5):
 supabase secrets set ASK_TERRA_DAILY_LIMIT=10
 ```
 
-### Auto-deploying the edge function
+### Auto-deploying migrations + edge functions
 
-`.github/workflows/deploy-edge-functions.yml` redeploys `ask-terra` whenever files under `supabase/functions/**` change. It needs two GitHub Secrets (Repo → **Settings → Secrets and variables → Actions → Secrets**):
+`.github/workflows/deploy-edge-functions.yml` runs on every push that touches `supabase/migrations/**` or `supabase/functions/**`. It:
+
+1. `supabase link --project-ref $SUPABASE_PROJECT_REF`
+2. `supabase db push --password $SUPABASE_DB_PASSWORD` — applies any new migrations.
+3. `supabase functions deploy ask-terra` — with JWT verification **on**.
+4. `supabase functions deploy ingest-events` — with JWT verification **off** (it's authenticated by the `x-ingest-secret` shared secret instead, so the GitHub Actions cron can reach it without a user token).
+
+GitHub Secrets (Repo → **Settings → Secrets and variables → Actions → Secrets**):
 
 | Secret | How to get it |
 | --- | --- |
 | `SUPABASE_ACCESS_TOKEN` | Supabase → **Account → Access Tokens → Generate new token** |
 | `SUPABASE_PROJECT_REF` | The 20-character project ref in your project URL (`https://<ref>.supabase.co`) |
+| `SUPABASE_DB_PASSWORD` | Supabase → **Project Settings → Database → Connection string → Password** (the one you set at project creation; reset it there if you don't remember) |
+| `INGEST_SECRET` | Any long random string — paste the same value into `supabase secrets set INGEST_SECRET=...` (see Events ingest section below). |
 
-Once both are set, any edit to the function file triggers a redeploy with no manual step.
+Once set, every push to `main` or `claude/terrawatch-redesign-dMM0l` that touches those paths auto-applies the migration **and** redeploys both functions.
+
+## Events ingest pipeline (Phase 8)
+
+The `events` table is a unified feed that backs the Home "Recent events" strip and the Explore list. Rows come from USGS earthquakes, NOAA NWS alerts (US), and NOAA SWPC Kp. Writing happens exclusively via the `ingest-events` edge function using the service-role key; anonymous clients have SELECT-only RLS so the feed renders without sign-in.
+
+### One-time setup
+
+1. **Apply migration 0002** — happens automatically via the workflow above on the first push that includes `supabase/migrations/0002_events_ingest.sql`. It enables PostGIS and creates the `events` table + `events_near()` + `events_prune()` functions.
+2. **Set the shared secret** on the Supabase project:
+
+   ```bash
+   openssl rand -hex 32    # generate a value
+   supabase secrets set INGEST_SECRET=<paste>
+   ```
+
+   Save the same value as the `INGEST_SECRET` GitHub Secret so the cron workflow can send it in the `x-ingest-secret` header.
+
+3. **Enable the cron** — the `.github/workflows/ingest-events-cron.yml` workflow runs every 10 minutes once the repo has the `SUPABASE_PROJECT_REF` and `INGEST_SECRET` secrets. First run: push the workflow file, then **Actions tab → Ingest events (cron) → Run workflow** to backfill immediately (scheduled runs take a few minutes to kick in on a new repo).
+
+### Manual ingest
+
+For local testing or to force a refresh:
+
+```bash
+curl -sS -X POST \
+  "https://<project-ref>.supabase.co/functions/v1/ingest-events" \
+  -H "x-ingest-secret: $INGEST_SECRET" \
+  -H "content-type: application/json" \
+  --data '{}' | jq
+```
+
+Expected response: `{ ok: true, durationMs: ..., results: { seismic: {...}, weather: {...}, space: {...} }, pruned: N }`.
+
+### Client behavior
+
+`src/composables/useEvents.ts` reads via the `events_near` RPC when `VITE_SUPABASE_URL` / `VITE_SUPABASE_ANON_KEY` are set, and transparently falls back to the legacy live-API path (USGS / Open-Meteo / SWPC direct) if the RPC errors or Supabase is unconfigured. The UI never goes blank mid-ingest.
 
 ## Troubleshooting
 
@@ -119,6 +164,8 @@ Once both are set, any edit to the function file triggers a redeploy with no man
 - **Build succeeds but sign-in silently fails** — `VITE_SUPABASE_*` env vars weren't set before the build. `VITE_*` vars are baked in at build time; set them in Worker settings and **Retry deployment**.
 - **Custom domain shows "SSL pending"** — normal for the first ~5 minutes after attaching. If it's still pending after an hour, confirm the zone status is **Active** and the nameserver change actually propagated (`dig NS terrawatchapp.com`).
 - **Service worker caches old build** — `vite-plugin-pwa` is set to `autoUpdate`; a hard reload clears it. If stale builds become a pattern we can add a "new version available" toast.
+- **Events feed is empty on the deployed app** — the ingest cron hasn't run yet or `INGEST_SECRET` doesn't match between Supabase and GitHub. Check **Actions → Ingest events (cron) → latest run** — HTTP 403 = secret mismatch, HTTP 500 = service-role missing from Supabase. The client falls back to live APIs in the meantime so the UI still renders.
+- **`supabase db push` fails in the deploy workflow** — `SUPABASE_DB_PASSWORD` is wrong or missing. Reset it in Supabase → Project Settings → Database and update the GitHub Secret.
 
 ## Migrating away from the old Hostinger FTP workflow
 
