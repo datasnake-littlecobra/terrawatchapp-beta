@@ -137,21 +137,64 @@ The `events` table is a unified feed that backs the Home "Recent events" strip a
 
    Save the same value as the `INGEST_SECRET` GitHub Secret so the cron workflow can send it in the `x-ingest-secret` header.
 
-3. **Enable the cron** — the `.github/workflows/ingest-events-cron.yml` workflow runs every 10 minutes once the repo has the `SUPABASE_PROJECT_REF` and `INGEST_SECRET` secrets. First run: push the workflow file, then **Actions tab → Ingest events (cron) → Run workflow** to backfill immediately (scheduled runs take a few minutes to kick in on a new repo).
+3. **Enable the scheduler** — see the pg_cron subsection below. The primary 10-minute schedule runs inside Postgres; GitHub Actions' `schedule` trigger proved too flaky (delayed activation, throttling under load) to back a user-visible feed.
+
+### pg_cron scheduler (primary)
+
+Migration `0003_pg_cron_ingest.sql` enables `pg_cron` + `pg_net` and schedules a job called `ingest-events-every-10-min` that POSTs to the edge function. Before the schedule can actually call the function, **two secrets need to live in Supabase Vault** — this is the one manual step, done once per project:
+
+```sql
+-- In Supabase Dashboard → SQL Editor, run:
+select vault.create_secret(
+  '<the-same-hex-string-you-set-as-INGEST_SECRET>',
+  'ingest_secret'
+);
+select vault.create_secret(
+  'https://<your-project-ref>.supabase.co/functions/v1/ingest-events',
+  'ingest_events_url'
+);
+```
+
+Verify the schedule is active:
+
+```sql
+select jobname, schedule, active from cron.job;
+-- expected: one active row 'ingest-events-every-10-min' with schedule '*/10 * * * *'
+```
+
+Inspect recent runs:
+
+```sql
+select jobname, status, return_message, start_time, end_time
+from cron.job_run_details
+order by start_time desc
+limit 10;
+```
+
+Pause / resume:
+
+```sql
+select cron.unschedule('ingest-events-every-10-min');       -- pause
+-- to resume, re-apply migration 0003 (idempotent) or run its cron.schedule(...) body
+```
+
+If the secrets aren't set, `trigger_ingest_events()` returns `null` and logs a notice — schedules will continue firing but do nothing, so set the Vault secrets first.
 
 ### Manual ingest
 
-For local testing or to force a refresh:
+For on-demand refresh (debugging or forcing a backfill):
 
-```bash
-curl -sS -X POST \
-  "https://<project-ref>.supabase.co/functions/v1/ingest-events" \
-  -H "x-ingest-secret: $INGEST_SECRET" \
-  -H "content-type: application/json" \
-  --data '{}' | jq
-```
+- **From the CLI**:
+  ```bash
+  curl -sS -X POST \
+    "https://<project-ref>.supabase.co/functions/v1/ingest-events" \
+    -H "x-ingest-secret: $INGEST_SECRET" \
+    -H "content-type: application/json" \
+    --data '{}' | jq
+  ```
+- **From GitHub Actions** — Actions tab → *Ingest events (manual)* → Run workflow. Same POST, but runs from GitHub's IP and shows output in the Actions UI.
 
-Expected response: `{ ok: true, durationMs: ..., results: { seismic: {...}, weather: {...}, space: {...} }, pruned: N }`.
+Expected response: `{ ok: true, durationMs: ..., results: { seismic: {...}, weather: {...}, space: {...} }, pruned: N }`. `ok: false` indicates at least one source errored — check Supabase → Edge Functions → `ingest-events` → Logs for the full stack trace.
 
 ### Client behavior
 
@@ -164,7 +207,8 @@ Expected response: `{ ok: true, durationMs: ..., results: { seismic: {...}, weat
 - **Build succeeds but sign-in silently fails** — `VITE_SUPABASE_*` env vars weren't set before the build. `VITE_*` vars are baked in at build time; set them in Worker settings and **Retry deployment**.
 - **Custom domain shows "SSL pending"** — normal for the first ~5 minutes after attaching. If it's still pending after an hour, confirm the zone status is **Active** and the nameserver change actually propagated (`dig NS terrawatchapp.com`).
 - **Service worker caches old build** — `vite-plugin-pwa` is set to `autoUpdate`; a hard reload clears it. If stale builds become a pattern we can add a "new version available" toast.
-- **Events feed is empty on the deployed app** — the ingest cron hasn't run yet or `INGEST_SECRET` doesn't match between Supabase and GitHub. Check **Actions → Ingest events (cron) → latest run** — HTTP 403 = secret mismatch, HTTP 500 = service-role missing from Supabase. The client falls back to live APIs in the meantime so the UI still renders.
+- **Events feed is empty on the deployed app** — the pg_cron schedule isn't running or Vault secrets aren't set. Check `select * from cron.job_run_details order by start_time desc limit 5;` — `status='failed'` with a message like "missing vault secrets" means you haven't run the two `vault.create_secret(...)` commands. If scheduling works but sources still fail, open **Supabase → Edge Functions → `ingest-events` → Logs** for the per-source error. The client falls back to live APIs in the meantime so the UI still renders.
+- **Only one source populating (e.g. `usgs.quakes` but no `nws.alerts` or `noaa.swpc.kp`)** — before Phase 8.2, the function silently swallowed upstream failures and filtered Kp < 4 out. Those are both fixed: the response now returns `ok: false` on partial failure, and Kp stores every hourly-max sample. Check function logs for the specific upstream error on the still-missing source.
 - **`supabase db push` fails in the deploy workflow** — `SUPABASE_DB_PASSWORD` is wrong or missing. Reset it in Supabase → Project Settings → Database and update the GitHub Secret.
 
 ## Migrating away from the old Hostinger FTP workflow

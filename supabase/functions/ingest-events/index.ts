@@ -216,8 +216,10 @@ async function ingestSpace(): Promise<EventRow[]> {
   interface Sample { time_tag: string; kp_index: number | null }
   const data = await fetchJson<Sample[]>(SWPC_KP_FEED)
   if (!Array.isArray(data) || !data.length) return []
-  // The 1-minute feed is noisy; take the max Kp per UTC hour and keep only
-  // hours where Kp >= 4 (anything below isn't worth a row in the feed).
+  // The 1-minute feed is noisy; bucket by UTC hour and keep the max Kp.
+  // We store every hourly bucket (even quiet ones) so the feed always has a
+  // current reading — 24 rows/day is trivial and gives the client something
+  // to show when geomagnetic conditions are calm.
   const buckets = new Map<string, { time: string; kp: number }>()
   for (const s of data) {
     if (s.kp_index == null || !s.time_tag) continue
@@ -229,19 +231,20 @@ async function ingestSpace(): Promise<EventRow[]> {
   }
   const rows: EventRow[] = []
   for (const { time, kp } of buckets.values()) {
-    if (kp < 4) continue
     rows.push({
       source: 'noaa.swpc.kp',
       external_id: `kp:${time.slice(0, 13)}`,
       kind: 'space',
       severity: kpSeverity(kp),
-      title: `Kp ${kp.toFixed(1)} geomagnetic ${kpSeverity(kp) === 'safe' ? 'activity' : 'storm'}`,
+      title: `Kp ${kp.toFixed(1)} geomagnetic ${kpSeverity(kp) === 'safe' ? 'quiet' : 'activity'}`,
       summary:
         kp >= 7
           ? 'Severe storm — GPS and HF radio likely degraded; aurora visible well outside polar regions.'
           : kp >= 5
             ? 'Minor storm — aurora possible at higher latitudes, some GPS drift.'
-            : 'Elevated geomagnetic activity.',
+            : kp >= 3
+              ? 'Elevated geomagnetic activity.'
+              : 'Quiet geomagnetic conditions.',
       location: null,
       location_label: null,
       country: null,
@@ -332,27 +335,40 @@ serve(async (req) => {
     }),
   )
 
+  let anyFailure = false
   for (let i = 0; i < outcomes.length; i++) {
     const [name] = tasks[i]
     const outcome = outcomes[i]
     if (outcome.status === 'fulfilled') {
-      results[name] = outcome.value[1]
+      const result = outcome.value[1]
+      results[name] = result
+      if (result.error) {
+        anyFailure = true
+        console.error(`[ingest:${name}] upsert error:`, result.error)
+      }
     } else {
-      results[name] = { error: outcome.reason instanceof Error ? outcome.reason.message : String(outcome.reason) }
+      anyFailure = true
+      const message = outcome.reason instanceof Error ? outcome.reason.message : String(outcome.reason)
+      results[name] = { error: message }
+      console.error(`[ingest:${name}] fetch/parse failed:`, outcome.reason)
     }
   }
 
-  // Best-effort prune; failure doesn't fail the whole run.
+  // Best-effort prune; failure doesn't fail the whole run but is logged.
   let pruned: number | null = null
   try {
-    const { data } = await admin.rpc('events_prune', { older_than_days: 30 })
-    pruned = typeof data === 'number' ? data : null
-  } catch {
-    pruned = null
+    const { data, error: pruneError } = await admin.rpc('events_prune', { older_than_days: 30 })
+    if (pruneError) {
+      console.error('[ingest:prune] rpc error:', pruneError.message)
+    } else {
+      pruned = typeof data === 'number' ? data : null
+    }
+  } catch (e) {
+    console.error('[ingest:prune] threw:', e)
   }
 
   return json({
-    ok: true,
+    ok: !anyFailure,
     durationMs: Date.now() - started,
     results,
     pruned,

@@ -1,14 +1,11 @@
-name: Ingest events (cron)
+name: Ingest events (manual)
 
-# Pings the `ingest-events` Supabase edge function on a 10-minute schedule.
-# The function pulls from USGS, NWS, and NOAA SWPC and upserts into the
-# `events` table. Auth is a shared secret (`x-ingest-secret`) so the run
-# doesn't need a user JWT. On-demand runs: Actions tab → Ingest events (cron)
-# → Run workflow.
+# Manual / on-demand ingest. The scheduled 10-min cadence lives in pg_cron
+# inside Supabase (migration 0003) — GitHub Actions' `schedule` trigger was
+# flaky (delayed activation, throttling under load). Keep this workflow for
+# hand-triggered reingest: Actions tab → Ingest events (manual) → Run workflow.
 
 on:
-  schedule:
-    - cron: '*/10 * * * *'
   workflow_dispatch:
 
 concurrency:
