@@ -1,55 +1,74 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { storeToRefs } from 'pinia'
 import Card from '@/ui/Card.vue'
 import Button from '@/ui/Button.vue'
 import Stat from '@/ui/Stat.vue'
 import AlertPill from '@/ui/AlertPill.vue'
+import AskTerraPanel from './AskTerraPanel.vue'
+import SaveLocationButton from '@/features/bookmarks/SaveLocationButton.vue'
 import { useTravelStore } from '@/stores/travel'
 import { en } from '@/i18n/en'
-import { Share } from '@capacitor/share'
+import { useShare } from '@/composables/useShare'
+import { getNearestShelters, type Shelter } from '@/services/fema'
 
 const router = useRouter()
 const travel = useTravelStore()
 const { verdict } = storeToRefs(travel)
+const { share } = useShare()
+
+const shelter = ref<Shelter | null>(null)
 
 const verdictCopy = computed(() => {
   if (!verdict.value) return ''
-  return en.travel.verdict[
-    verdict.value.verdict === 'go'
-      ? 'go'
-      : verdict.value.verdict === 'caution'
-        ? 'caution'
-        : 'reconsider'
-  ]
+  return en.travel.verdict[verdict.value.verdict]
 })
 
-const verdictTone = computed(() => {
-  if (!verdict.value) return 'info' as const
-  return verdict.value.verdict === 'go'
-    ? 'safe'
-    : verdict.value.verdict === 'caution'
-      ? 'caution'
-      : 'danger'
-})
-
-async function share() {
+async function doShare() {
   if (!verdict.value) return
-  const text = `TerraWatch advisory for ${verdict.value.request.destination.name}: ${verdictCopy.value} (${verdict.value.score.score}/100)`
+  const text = en.travel.shareText(
+    verdict.value.request.destination.name,
+    verdictCopy.value,
+    verdict.value.score.score,
+  )
+  await share({
+    title: 'TerraWatch advisory',
+    text,
+    dialogTitle: en.travel.share,
+    url: 'https://terrawatchapp.com',
+  })
+}
+
+async function loadShelter() {
+  shelter.value = null
+  if (!verdict.value || verdict.value.verdict === 'go') return
   try {
-    await Share.share({ title: 'TerraWatch advisory', text, dialogTitle: en.travel.share })
+    const list = await getNearestShelters(
+      {
+        lat: verdict.value.request.destination.lat,
+        lon: verdict.value.request.destination.lon,
+      },
+      1,
+      250,
+    )
+    shelter.value = list[0] ?? null
   } catch {
-    if ('share' in navigator) {
-      await navigator.share({ title: 'TerraWatch advisory', text }).catch(() => {})
-    }
+    shelter.value = null
   }
+}
+
+function shelterDirectionsUrl(s: Shelter): string {
+  return `https://www.google.com/maps/dir/?api=1&destination=${s.lat},${s.lon}`
 }
 
 function back() {
   travel.reset()
   void router.push('/travel')
 }
+
+onMounted(loadShelter)
+watch(verdict, loadShelter)
 </script>
 
 <template>
@@ -68,6 +87,14 @@ function back() {
       <p class="text-ink-muted text-sm mt-1 num">
         {{ verdict.request.start.toDateString() }} → {{ verdict.request.end.toDateString() }}
       </p>
+      <div class="mt-3">
+        <SaveLocationButton
+          :lat="verdict.request.destination.lat"
+          :lon="verdict.request.destination.lon"
+          :label="`${verdict.request.destination.name}, ${verdict.request.destination.country}`"
+          kind="trip"
+        />
+      </div>
     </header>
 
     <Card elevated padded>
@@ -130,6 +157,29 @@ function back() {
       </div>
     </Card>
 
+    <AskTerraPanel />
+
+    <Card v-if="shelter" padded>
+      <div class="flex items-start justify-between gap-3">
+        <div class="min-w-0">
+          <p class="text-ink-muted text-xs tracking-widest uppercase">Nearest shelter</p>
+          <p class="font-medium mt-1 truncate">{{ shelter.name }}</p>
+          <p class="text-ink-muted text-sm mt-0.5 truncate">{{ shelter.address }}</p>
+          <p class="num text-ink-muted text-xs mt-1">
+            {{ shelter.distanceKm.toFixed(1) }} {{ en.common.km }} from destination
+          </p>
+        </div>
+        <a
+          :href="shelterDirectionsUrl(shelter)"
+          target="_blank"
+          rel="noopener"
+          class="text-accent text-xs font-medium shrink-0 self-start hover:underline"
+        >
+          {{ en.shelters.directions }} →
+        </a>
+      </div>
+    </Card>
+
     <Card padded>
       <h3 class="font-medium mb-3">{{ en.safety.reasonsHeader }}</h3>
       <ul class="space-y-3">
@@ -173,7 +223,7 @@ function back() {
     </Card>
 
     <div class="flex gap-2">
-      <Button variant="primary" size="lg" block @click="share">{{ en.travel.share }}</Button>
+      <Button variant="primary" size="lg" block @click="doShare">{{ en.travel.share }}</Button>
       <Button variant="ghost" size="lg" @click="back">New trip</Button>
     </div>
   </div>

@@ -8,11 +8,14 @@ import Gauge from '@/ui/Gauge.vue'
 import AlertPill from '@/ui/AlertPill.vue'
 import Card from '@/ui/Card.vue'
 import Button from '@/ui/Button.vue'
+import SaveLocationButton from '@/features/bookmarks/SaveLocationButton.vue'
+import { useShare } from '@/composables/useShare'
 
 const location = useLocationStore()
 const safety = useSafetyStore()
 const { coords, label, status } = storeToRefs(location)
 const { score, loading, error } = storeToRefs(safety)
+const { share } = useShare()
 
 watch(
   coords,
@@ -26,6 +29,18 @@ const headline = computed(() => {
   if (!score.value) return ''
   return en.safety.band[score.value.band]
 })
+
+async function doShare() {
+  if (!score.value) return
+  const where = label.value ?? 'my area'
+  const text = en.safety.shareText(where, score.value.score, headline.value)
+  await share({
+    title: 'TerraWatch',
+    text,
+    url: 'https://terrawatchapp.com',
+    dialogTitle: en.safety.shareDialog,
+  })
+}
 </script>
 
 <template>
@@ -60,9 +75,19 @@ const headline = computed(() => {
           />
         </div>
 
-        <Button variant="ghost" size="sm" class="mt-4">
-          {{ en.safety.cta }}
-        </Button>
+        <div class="mt-4 flex flex-wrap items-center justify-center gap-2">
+          <Button variant="ghost" size="sm" @click="doShare">
+            <span aria-hidden="true" class="mr-1.5">↗</span>
+            {{ en.safety.shareCta }}
+          </Button>
+          <SaveLocationButton
+            v-if="coords && label"
+            :lat="coords.lat"
+            :lon="coords.lon"
+            :label="label"
+            kind="home"
+          />
+        </div>
       </template>
 
       <template v-else-if="error">
