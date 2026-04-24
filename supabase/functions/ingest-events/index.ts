@@ -14,7 +14,13 @@ const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '
 const INGEST_SECRET = Deno.env.get('INGEST_SECRET') ?? ''
 
 const USGS_FEED = 'https://earthquake.usgs.gov/earthquakes/feed/v1.0/summary/all_day.geojson'
-const NWS_ALERTS_FEED = 'https://api.weather.gov/alerts/active?status=actual&message_type=alert&limit=500'
+// NWS is picky about headers and rejects compound query params — keep URL
+// minimal and send the contact-format User-Agent + geo+json Accept they ask for.
+const NWS_ALERTS_FEED = 'https://api.weather.gov/alerts/active?limit=500'
+const NWS_HEADERS: Record<string, string> = {
+  'user-agent': '(terrawatchapp.com, ops@terrawatchapp.com)',
+  accept: 'application/geo+json',
+}
 const SWPC_KP_FEED = 'https://services.swpc.noaa.gov/json/planetary_k_index_1m.json'
 
 const CORS_HEADERS: Record<string, string> = {
@@ -148,7 +154,7 @@ async function ingestWeather(): Promise<EventRow[]> {
     }
     geometry: { type: string; coordinates: unknown } | null
   }
-  const data = await fetchJson<{ features: Alert[] }>(NWS_ALERTS_FEED)
+  const data = await fetchJson<{ features: Alert[] }>(NWS_ALERTS_FEED, { headers: NWS_HEADERS })
   const rows: EventRow[] = []
   for (const a of data.features) {
     const p = a.properties
