@@ -17,7 +17,10 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.45.3'
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL') ?? ''
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
 const INGEST_SECRET = Deno.env.get('INGEST_SECRET') ?? ''
-const USGS_FEED = 'https://earthquake.usgs.gov/earthquakes/feed/v1.0/summary/all_week.geojson'
+// USGS 2.5+ week feed: M2.5 floor strips out micro-quake noise, payload is
+// ~10× smaller than all_week.geojson, JSON.parse stays fast. Typical row count
+// ~200-400 / week, well under the per-source cap below.
+const USGS_FEED = 'https://earthquake.usgs.gov/earthquakes/feed/v1.0/summary/2.5_week.geojson'
 const NWS_ALERTS_FEED = 'https://api.weather.gov/alerts/active?limit=200'
 // NASA EONET — curated wildfire event layer (~50-200 active events globally).
 // Structured GeoJSON, no API key needed, far lighter than raw FIRMS detections.
@@ -38,6 +41,25 @@ const CORS_HEADERS: Record<string, string> = {
 
 type Severity = 'safe' | 'caution' | 'danger'
 type Kind = 'seismic' | 'weather' | 'space' | 'tide' | 'ufo' | 'datasnake'
+
+// Hard ceiling per source per ingest run. Keeps memory + upsert work
+// predictable. Bump this once we've confirmed the function stays comfortably
+// inside the CPU budget.
+const MAX_ROWS_PER_SOURCE = 500
+
+const SEVERITY_RANK: Record<Severity, number> = { danger: 0, caution: 1, safe: 2 }
+
+// Cap rows to MAX_ROWS_PER_SOURCE, prioritising danger > caution > safe and
+// then most-recent. Cheap O(n log n) sort; no impact on CPU budget.
+function capRows(rows: EventRow[]): EventRow[] {
+  if (rows.length <= MAX_ROWS_PER_SOURCE) return rows
+  rows.sort((a, b) => {
+    const sevDiff = SEVERITY_RANK[a.severity] - SEVERITY_RANK[b.severity]
+    if (sevDiff !== 0) return sevDiff
+    return new Date(b.occurred_at).getTime() - new Date(a.occurred_at).getTime()
+  })
+  return rows.slice(0, MAX_ROWS_PER_SOURCE)
+}
 
 interface EventRow {
   source: string
@@ -176,7 +198,7 @@ async function ingestSeismic(): Promise<EventRow[]> {
       },
     })
   }
-  return rows
+  return capRows(rows)
 }
 
 async function ingestWeather(): Promise<EventRow[]> {
@@ -230,7 +252,7 @@ async function ingestWeather(): Promise<EventRow[]> {
       },
     })
   }
-  return rows
+  return capRows(rows)
 }
 
 // Take the first vertex of the first ring — O(1), accurate enough for a map pin.
@@ -299,7 +321,7 @@ async function ingestSpace(): Promise<EventRow[]> {
       payload: {},
     })
   }
-  return rows
+  return capRows(rows)
 }
 
 // NASA EONET — curated wildfire events (~50-200 globally, structured GeoJSON,
@@ -354,7 +376,7 @@ async function ingestWildfires(): Promise<EventRow[]> {
       payload: { eonet_id: e.id, closed: e.closed, magnitude_unit: geom.magnitudeUnit ?? 'acres' },
     })
   }
-  return rows
+  return capRows(rows)
 }
 
 async function ingestVolcanoes(): Promise<EventRow[]> {
@@ -403,7 +425,7 @@ async function ingestVolcanoes(): Promise<EventRow[]> {
       payload: { alertLevel: level, colorCode: v.colorCode ?? null, observatory: v.observatory ?? null },
     })
   }
-  return rows
+  return capRows(rows)
 }
 
 interface UpsertResult { attempted: number; upserted: number; skipped: number; error: string | null }
