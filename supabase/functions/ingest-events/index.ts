@@ -18,7 +18,7 @@ const SUPABASE_URL = Deno.env.get('SUPABASE_URL') ?? ''
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
 const INGEST_SECRET = Deno.env.get('INGEST_SECRET') ?? ''
 const USGS_FEED = 'https://earthquake.usgs.gov/earthquakes/feed/v1.0/summary/all_week.geojson'
-const NWS_ALERTS_FEED = 'https://api.weather.gov/alerts/active?limit=500'
+const NWS_ALERTS_FEED = 'https://api.weather.gov/alerts/active?limit=200'
 // NASA EONET — curated wildfire event layer (~50-200 active events globally).
 // Structured GeoJSON, no API key needed, far lighter than raw FIRMS detections.
 const EONET_WILDFIRES_FEED = 'https://eonet.gsfc.nasa.gov/api/v3/events?category=wildfires&days=7&status=open&limit=200'
@@ -233,6 +233,9 @@ async function ingestWeather(): Promise<EventRow[]> {
   return rows
 }
 
+// Take the first vertex of the first ring — O(1), accurate enough for a map pin.
+// Averaging all vertices (the old approach) was O(n) on polygons with hundreds
+// of points per NWS alert, which added up across 200 alerts.
 function geometryCentroid(geom: { type: string; coordinates: unknown } | null): { lat: number; lon: number } | null {
   if (!geom) return null
   try {
@@ -241,27 +244,17 @@ function geometryCentroid(geom: { type: string; coordinates: unknown } | null): 
       return { lat, lon }
     }
     if (geom.type === 'Polygon') {
-      const ring = (geom.coordinates as number[][][])[0]
-      return averageCoords(ring)
+      const pt = (geom.coordinates as number[][][])[0]?.[0]
+      if (pt) return { lat: pt[1], lon: pt[0] }
     }
     if (geom.type === 'MultiPolygon') {
-      const firstRing = (geom.coordinates as number[][][][])[0]?.[0]
-      if (firstRing) return averageCoords(firstRing)
+      const pt = (geom.coordinates as number[][][][])[0]?.[0]?.[0]
+      if (pt) return { lat: pt[1], lon: pt[0] }
     }
   } catch {
     return null
   }
   return null
-}
-
-function averageCoords(ring: number[][]): { lat: number; lon: number } | null {
-  if (!ring?.length) return null
-  let lon = 0, lat = 0
-  for (const pt of ring) {
-    lon += pt[0]
-    lat += pt[1]
-  }
-  return { lat: lat / ring.length, lon: lon / ring.length }
 }
 
 async function ingestSpace(): Promise<EventRow[]> {
@@ -415,12 +408,10 @@ async function ingestVolcanoes(): Promise<EventRow[]> {
 
 interface UpsertResult { attempted: number; upserted: number; skipped: number; error: string | null }
 
-async function upsertRows(
-  admin: ReturnType<typeof createClient>,
-  rows: EventRow[],
-): Promise<UpsertResult> {
-  if (!rows.length) return { attempted: 0, upserted: 0, skipped: 0, error: null }
-  const prepared = rows.map((r) => ({
+const UPSERT_CHUNK = 200
+
+function prepareRow(r: EventRow) {
+  return {
     source: r.source,
     external_id: r.external_id,
     kind: r.kind,
@@ -428,9 +419,7 @@ async function upsertRows(
     severity: r.severity,
     title: r.title,
     summary: r.summary,
-    location: r.location
-      ? `SRID=4326;POINT(${r.location.lon} ${r.location.lat})`
-      : null,
+    location: r.location ? `SRID=4326;POINT(${r.location.lon} ${r.location.lat})` : null,
     location_label: r.location_label,
     country: r.country,
     region: r.region,
@@ -441,14 +430,28 @@ async function upsertRows(
     expires_at: r.expires_at,
     payload: r.payload,
     ingested_at: new Date().toISOString(),
-  }))
-  const { error, count } = await admin
-    .from('events')
-    .upsert(prepared, { onConflict: 'source,external_id', count: 'exact', ignoreDuplicates: false })
-  if (error) {
-    return { attempted: rows.length, upserted: 0, skipped: 0, error: error.message }
   }
-  return { attempted: rows.length, upserted: count ?? rows.length, skipped: 0, error: null }
+}
+
+// Upsert in chunks of UPSERT_CHUNK rows, yielding between batches so CPU
+// usage stays flat instead of spiking on one large serialization.
+async function upsertRows(
+  admin: ReturnType<typeof createClient>,
+  rows: EventRow[],
+): Promise<UpsertResult> {
+  if (!rows.length) return { attempted: 0, upserted: 0, skipped: 0, error: null }
+  for (let i = 0; i < rows.length; i += UPSERT_CHUNK) {
+    const chunk = rows.slice(i, i + UPSERT_CHUNK).map(prepareRow)
+    const { error } = await admin
+      .from('events')
+      .upsert(chunk, { onConflict: 'source,external_id', ignoreDuplicates: false })
+    if (error) {
+      return { attempted: rows.length, upserted: i, skipped: 0, error: error.message }
+    }
+    // Yield the event loop between chunks — keeps CPU pressure low.
+    if (i + UPSERT_CHUNK < rows.length) await new Promise<void>((r) => setTimeout(r, 0))
+  }
+  return { attempted: rows.length, upserted: rows.length, skipped: 0, error: null }
 }
 
 serve(async (req) => {
@@ -474,6 +477,8 @@ serve(async (req) => {
   const started = Date.now()
   const results: Record<string, UpsertResult | { error: string }> = {}
 
+  // Sequential pipeline — each source fetches, parses, and upserts before the
+  // next starts. Peak CPU is flat rather than 5× spiked from parallel execution.
   const tasks: Array<[string, () => Promise<EventRow[]>]> = [
     ['seismic', ingestSeismic],
     ['weather', ingestWeather],
@@ -482,49 +487,37 @@ serve(async (req) => {
     ['volcanoes', ingestVolcanoes],
   ]
 
-  const outcomes = await Promise.allSettled(
-    tasks.map(async ([name, fn]) => {
+  let anyFailure = false
+  for (const [name, fn] of tasks) {
+    try {
       const rows = await fn()
       const result = await upsertRows(admin, rows)
-      return [name, result] as const
-    }),
-  )
-
-  let anyFailure = false
-  for (let i = 0; i < outcomes.length; i++) {
-    const [name] = tasks[i]
-    const outcome = outcomes[i]
-    if (outcome.status === 'fulfilled') {
-      const result = outcome.value[1]
       results[name] = result
       if (result.error) {
         anyFailure = true
         console.error(`[ingest:${name}] upsert error:`, result.error)
       }
-    } else {
+    } catch (e) {
       anyFailure = true
-      const message = outcome.reason instanceof Error ? outcome.reason.message : String(outcome.reason)
+      const message = e instanceof Error ? e.message : String(e)
       results[name] = { error: message }
-      console.error(`[ingest:${name}] fetch/parse failed:`, outcome.reason)
+      console.error(`[ingest:${name}] fetch/parse failed:`, e)
     }
   }
 
-  let pruned: number | null = null
-  try {
-    const { data, error: pruneError } = await admin.rpc('events_prune')
-    if (pruneError) {
-      console.error('[ingest:prune] rpc error:', pruneError.message)
-    } else {
-      pruned = typeof data === 'number' ? data : null
-    }
-  } catch (e) {
-    console.error('[ingest:prune] threw:', e)
-  }
-
-  return json({
+  const response = json({
     ok: !anyFailure,
     durationMs: Date.now() - started,
     results,
-    pruned,
   })
+
+  // Prune after the response is sent — doesn't count against request CPU quota.
+  // deno-lint-ignore no-explicit-any
+  ;(globalThis as any).EdgeRuntime?.waitUntil(
+    admin.rpc('events_prune').then(({ error }: { error: { message: string } | null }) => {
+      if (error) console.error('[ingest:prune] rpc error:', error.message)
+    }).catch((e: unknown) => console.error('[ingest:prune] threw:', e))
+  )
+
+  return response
 })
