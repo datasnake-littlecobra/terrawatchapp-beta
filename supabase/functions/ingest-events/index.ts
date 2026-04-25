@@ -6,7 +6,7 @@
 //
 // Phase 9.0 adds:
 //   - NWS event-string classification → category (tornado, flood, tsunami, etc.)
-//   - NASA FIRMS active-fire detections (wildfires)
+//   - NASA EONET wildfire events (curated, no API key, replaces FIRMS CSV)
 //   - USGS Volcano Hazards Program elevated-volcanoes feed
 //   - Tsunami flag on USGS quakes (when the feed marks one)
 
@@ -17,21 +17,16 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.45.3'
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL') ?? ''
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
 const INGEST_SECRET = Deno.env.get('INGEST_SECRET') ?? ''
-const NASA_FIRMS_MAP_KEY = Deno.env.get('NASA_FIRMS_MAP_KEY') ?? ''
-
-const USGS_FEED = 'https://earthquake.usgs.gov/earthquakes/feed/v1.0/summary/all_day.geojson'
+const USGS_FEED = 'https://earthquake.usgs.gov/earthquakes/feed/v1.0/summary/all_week.geojson'
 const NWS_ALERTS_FEED = 'https://api.weather.gov/alerts/active?limit=500'
+// NASA EONET — curated wildfire event layer (~50-200 active events globally).
+// Structured GeoJSON, no API key needed, far lighter than raw FIRMS detections.
+const EONET_WILDFIRES_FEED = 'https://eonet.gsfc.nasa.gov/api/v3/events?category=wildfires&days=7&status=open&limit=200'
 const NWS_HEADERS: Record<string, string> = {
   'user-agent': '(terrawatchapp.com, ops@terrawatchapp.com)',
   accept: 'application/geo+json',
 }
 const SWPC_KP_FEED = 'https://services.swpc.noaa.gov/json/planetary_k_index_1m.json'
-const FIRMS_FEED_BASE = 'https://firms.modaps.eosdis.nasa.gov/api/area/csv'
-// VIIRS_NOAA20_NRT is the recommended near-real-time fire product (~3h latency,
-// 375m resolution). 1 = last 24h, world = global.
-const FIRMS_PRODUCT = 'VIIRS_NOAA20_NRT'
-const FIRMS_AREA = 'world'
-const FIRMS_DAYS = 1
 // USGS Volcano Hazards Program — elevated alert level volcanoes, US-focused.
 const USGS_VOLCANOES_FEED = 'https://volcanoes.usgs.gov/hans-public/api/volcano/getElevatedVolcanoes'
 
@@ -111,16 +106,6 @@ function nwsCategory(event: string): string {
   return 'weather_alert'
 }
 
-function firmsSeverity(confidence: string, frp: number): Severity {
-  // FIRMS confidence is 'l' / 'n' / 'h' (low/nominal/high) for VIIRS, or
-  // 0–100 for MODIS. FRP (Fire Radiative Power, MW) gives a sense of intensity.
-  const c = confidence?.toLowerCase()
-  const isHighConf = c === 'h' || (Number(c) >= 80)
-  if (isHighConf && frp >= 100) return 'danger'
-  if (isHighConf || frp >= 25) return 'caution'
-  return 'safe'
-}
-
 function volcanoSeverity(level: string): Severity {
   const l = (level ?? '').toLowerCase()
   if (l === 'red' || l === 'warning') return 'danger'
@@ -141,14 +126,6 @@ async function fetchJson<T>(url: string, init?: RequestInit): Promise<T> {
     throw new Error(`${url} → ${res.status} ${res.statusText}`)
   }
   return (await res.json()) as T
-}
-
-async function fetchText(url: string, init?: RequestInit): Promise<string> {
-  const res = await fetch(url, init)
-  if (!res.ok) {
-    throw new Error(`${url} → ${res.status} ${res.statusText}`)
-  }
-  return await res.text()
 }
 
 async function ingestSeismic(): Promise<EventRow[]> {
@@ -332,83 +309,56 @@ async function ingestSpace(): Promise<EventRow[]> {
   return rows
 }
 
-// NASA FIRMS returns CSV; cluster detections by 0.1° grid cell + acquisition
-// hour to avoid flooding the table with 50k near-identical rows.
+// NASA EONET — curated wildfire events (~50-200 globally, structured GeoJSON,
+// no API key, no CSV parsing). Replaces raw FIRMS detections for the MVP.
 async function ingestWildfires(): Promise<EventRow[]> {
-  if (!NASA_FIRMS_MAP_KEY) {
-    console.warn('[ingest:wildfires] NASA_FIRMS_MAP_KEY not set; skipping')
-    return []
+  interface EonetGeometry {
+    magnitudeValue: number | null
+    magnitudeUnit: string | null
+    date: string
+    type: string
+    coordinates: number[] | number[][][]
   }
-  const url = `${FIRMS_FEED_BASE}/${NASA_FIRMS_MAP_KEY}/${FIRMS_PRODUCT}/${FIRMS_AREA}/${FIRMS_DAYS}`
-  const csv = await fetchText(url)
-  const lines = csv.trim().split('\n')
-  if (lines.length < 2) return []
-  const header = lines[0].split(',').map((h) => h.trim().toLowerCase())
-  const idx = (name: string) => header.indexOf(name)
-  const iLat = idx('latitude')
-  const iLon = idx('longitude')
-  const iDate = idx('acq_date')
-  const iTime = idx('acq_time')
-  const iConf = idx('confidence')
-  const iFrp = idx('frp')
-  const iBright = idx('bright_ti4')
-  if (iLat < 0 || iLon < 0 || iDate < 0 || iTime < 0) {
-    throw new Error(`FIRMS CSV missing required columns; header: ${header.join(',')}`)
+  interface EonetEvent {
+    id: string
+    title: string
+    description?: string
+    closed: string | null
+    geometry: EonetGeometry[]
   }
-
-  // Cluster: key = `${latGrid}:${lonGrid}:${date}:${hourBucket}`. Within a cell
-  // we keep the highest-FRP detection as the representative row.
-  const clusters = new Map<string, { lat: number; lon: number; conf: string; frp: number; bright: number; date: string; time: string }>()
-  for (let i = 1; i < lines.length; i++) {
-    const cols = lines[i].split(',')
-    const lat = parseFloat(cols[iLat])
-    const lon = parseFloat(cols[iLon])
-    if (!Number.isFinite(lat) || !Number.isFinite(lon)) continue
-    const date = cols[iDate]
-    const time = cols[iTime] ?? '0000'
-    const conf = cols[iConf] ?? ''
-    const frp = parseFloat(cols[iFrp] ?? '0') || 0
-    const bright = iBright >= 0 ? parseFloat(cols[iBright] ?? '0') || 0 : 0
-
-    // Skip low-confidence noise outright — VIIRS 'l' or MODIS < 30
-    const cl = conf.toLowerCase()
-    if (cl === 'l') continue
-    if (!Number.isNaN(Number(cl)) && Number(cl) < 30) continue
-
-    const latGrid = Math.round(lat * 10) / 10
-    const lonGrid = Math.round(lon * 10) / 10
-    const hourBucket = time.padStart(4, '0').slice(0, 2)
-    const key = `${latGrid}:${lonGrid}:${date}:${hourBucket}`
-    const cur = clusters.get(key)
-    if (!cur || frp > cur.frp) {
-      clusters.set(key, { lat, lon, conf, frp, bright, date, time })
-    }
-  }
-
+  const data = await fetchJson<{ events: EonetEvent[] }>(EONET_WILDFIRES_FEED)
+  if (!Array.isArray(data?.events)) return []
   const rows: EventRow[] = []
-  for (const [key, c] of clusters) {
-    // Construct an ISO timestamp from FIRMS date + 4-digit time (UTC).
-    const t = c.time.padStart(4, '0')
-    const iso = `${c.date}T${t.slice(0, 2)}:${t.slice(2, 4)}:00Z`
+  for (const e of data.events) {
+    if (!e.geometry?.length) continue
+    const geom = e.geometry[e.geometry.length - 1]
+    let lat: number | null = null
+    let lon: number | null = null
+    if (geom.type === 'Point' && Array.isArray(geom.coordinates)) {
+      lon = (geom.coordinates as number[])[0]
+      lat = (geom.coordinates as number[])[1]
+    }
+    const magAcres = geom.magnitudeValue
+    const sev: Severity = magAcres != null && magAcres >= 10000 ? 'danger' : 'caution'
     rows.push({
-      source: 'nasa.firms',
-      external_id: `firms:${key}`,
+      source: 'nasa.eonet',
+      external_id: e.id,
       kind: 'weather',
       category: 'wildfire',
-      severity: firmsSeverity(c.conf, c.frp),
-      title: c.frp >= 100 ? 'High-intensity active fire' : 'Active fire detection',
-      summary: `Lat ${c.lat.toFixed(2)}, Lon ${c.lon.toFixed(2)} · FRP ${c.frp.toFixed(0)} MW · confidence ${c.conf || 'n/a'}`,
-      location: { lat: c.lat, lon: c.lon },
+      severity: sev,
+      title: e.title,
+      summary: e.description?.trim() ||
+        (lat != null ? `Active wildfire · ${lat.toFixed(2)}°, ${lon!.toFixed(2)}°` : 'Active wildfire'),
+      location: lat != null && lon != null ? { lat, lon } : null,
       location_label: null,
       country: null,
       region: null,
-      magnitude: null,
+      magnitude: magAcres ?? null,
       depth_km: null,
       kp: null,
-      occurred_at: iso,
-      // Fires age out fast; use 24h expiry so the table doesn't grow forever.
-      expires_at: new Date(new Date(iso).getTime() + 24 * 3600 * 1000).toISOString(),
-      payload: { confidence: c.conf, frp: c.frp, bright_ti4: c.bright, product: FIRMS_PRODUCT },
+      occurred_at: new Date(geom.date).toISOString(),
+      expires_at: null,
+      payload: { eonet_id: e.id, closed: e.closed, magnitude_unit: geom.magnitudeUnit ?? 'acres' },
     })
   }
   return rows
@@ -561,7 +511,7 @@ serve(async (req) => {
 
   let pruned: number | null = null
   try {
-    const { data, error: pruneError } = await admin.rpc('events_prune', { older_than_days: 30 })
+    const { data, error: pruneError } = await admin.rpc('events_prune')
     if (pruneError) {
       console.error('[ingest:prune] rpc error:', pruneError.message)
     } else {
