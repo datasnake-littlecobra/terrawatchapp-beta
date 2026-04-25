@@ -12,6 +12,7 @@ interface EventsNearRow {
   source: string
   external_id: string
   kind: string
+  category: string | null
   severity: 'safe' | 'caution' | 'danger'
   title: string
   summary: string
@@ -53,6 +54,7 @@ function rowToFeedEvent(r: EventsNearRow): FeedEvent {
     timestamp: new Date(r.occurred_at),
     raw: r,
   }
+  if (r.category) event.category = r.category
   if (r.lat != null && r.lon != null) {
     event.location = { lat: r.lat, lon: r.lon }
   }

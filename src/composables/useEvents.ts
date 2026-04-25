@@ -33,6 +33,7 @@ function toSeismicEvent(q: Quake, center: LatLon): FeedEvent {
   return {
     id: `seismic:${q.id}`,
     kind: 'seismic',
+    category: 'earthquake',
     severity: quakeSeverity(q.magnitude),
     title: `M${q.magnitude.toFixed(1)} earthquake`,
     summary: `${q.place} · ${dist.toFixed(0)} km away · depth ${q.depthKm.toFixed(0)} km`,
@@ -51,6 +52,7 @@ function toWeatherEvents(bundle: ForecastBundle, center: LatLon, label: string):
       return {
         id: `weather:${d.date}`,
         kind: 'weather',
+        category: 'weather_alert',
         severity: sev,
         title: `${weatherCodeLabel(d.weatherCode)} · ${d.date.slice(5)}`,
         summary:
@@ -71,6 +73,7 @@ function toSpaceEvents(samples: KpSample[]): FeedEvent[] {
     .map((s): FeedEvent => ({
       id: `space:${s.time.toISOString()}`,
       kind: 'space',
+      category: 'geomagnetic_storm',
       severity: kpSeverity(s.kp),
       title: `Kp ${s.kp.toFixed(1)} geomagnetic ${kpSeverity(s.kp) === 'safe' ? 'quiet' : 'activity'}`,
       summary:
