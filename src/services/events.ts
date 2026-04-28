@@ -1,7 +1,8 @@
 // TerraWatch — Phase 8 events query layer.
-// Reads from the Supabase `events` table populated by the `ingest-events`
-// edge function. Consumers (e.g. useEvents) fall back to live upstream APIs
-// when Supabase is unconfigured, so local dev without env vars keeps working.
+// Reads from the Supabase `events` table populated by the per-source
+// ingest-{seismic,weather,space,wildfires,volcanoes} edge functions (Phase 9.0.1).
+// Consumers (e.g. useEvents) fall back to live upstream APIs when Supabase is
+// unconfigured, so local dev without env vars keeps working.
 
 import { supabase, supabaseConfigured } from './supabase'
 import type { FeedEvent, FeedEventKind } from '@/types/dataSource'

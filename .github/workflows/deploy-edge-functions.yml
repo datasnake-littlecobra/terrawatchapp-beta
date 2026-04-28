@@ -42,7 +42,19 @@ jobs:
       - name: Deploy ask-terra
         run: supabase functions deploy ask-terra --no-verify-jwt=false
 
-      - name: Deploy ingest-events
-        # Authenticated by shared secret (x-ingest-secret), not the Supabase
-        # JWT — so the GitHub Actions cron can invoke it without a user token.
-        run: supabase functions deploy ingest-events --no-verify-jwt=true
+      # Phase 9.0.1 — per-source ingest functions. Each is invoked by pg_cron
+      # via the shared `x-ingest-secret` header (no Supabase JWT).
+      - name: Deploy ingest-seismic
+        run: supabase functions deploy ingest-seismic --no-verify-jwt=true
+
+      - name: Deploy ingest-weather
+        run: supabase functions deploy ingest-weather --no-verify-jwt=true
+
+      - name: Deploy ingest-space
+        run: supabase functions deploy ingest-space --no-verify-jwt=true
+
+      - name: Deploy ingest-wildfires
+        run: supabase functions deploy ingest-wildfires --no-verify-jwt=true
+
+      - name: Deploy ingest-volcanoes
+        run: supabase functions deploy ingest-volcanoes --no-verify-jwt=true
