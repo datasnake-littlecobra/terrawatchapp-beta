@@ -27,8 +27,23 @@ interface Volcano {
 }
 
 async function ingestVolcanoes(): Promise<EventRow[]> {
-  const data = await fetchJson<Volcano[] | { items?: Volcano[] }>(USGS_VOLCANOES_FEED)
-  const list: Volcano[] = Array.isArray(data) ? data : (data?.items ?? [])
+  const data = await fetchJson<unknown>(USGS_VOLCANOES_FEED)
+  // USGS HANS has shifted shape over time: sometimes a bare array, sometimes
+  // wrapped in { items }, { data }, or { volcanoes }. Be permissive and log
+  // the actual shape when we get nothing so we can adjust quickly.
+  const obj = (data ?? {}) as Record<string, unknown>
+  const list: Volcano[] = Array.isArray(data)
+    ? (data as Volcano[])
+    : ((obj.items as Volcano[] | undefined)
+        ?? (obj.data as Volcano[] | undefined)
+        ?? (obj.volcanoes as Volcano[] | undefined)
+        ?? [])
+  if (list.length === 0) {
+    const shape = Array.isArray(data)
+      ? `array(${(data as unknown[]).length})`
+      : `keys=${Object.keys(obj).join(',') || '<empty>'}`
+    console.warn(`[ingest:volcanoes] empty list — response shape ${shape}`)
+  }
   const rows: EventRow[] = []
   for (const v of list) {
     const name = v.volcanoName ?? v.name
