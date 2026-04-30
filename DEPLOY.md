@@ -108,7 +108,7 @@ supabase secrets set ASK_TERRA_DAILY_LIMIT=10
 1. `supabase link --project-ref $SUPABASE_PROJECT_REF`
 2. `supabase db push --password $SUPABASE_DB_PASSWORD` — applies any new migrations.
 3. `supabase functions deploy ask-terra` — with JWT verification **on**.
-4. `supabase functions deploy ingest-events` — with JWT verification **off** (it's authenticated by the `x-ingest-secret` shared secret instead, so the GitHub Actions cron can reach it without a user token).
+4. `supabase functions deploy ingest-{seismic,weather,space,wildfires,volcanoes}` — five per-source functions, each with JWT verification **off** (authenticated by the shared `x-ingest-secret` header instead). The split exists because the old monolithic `ingest-events` function kept hitting Supabase's per-invocation memory cap (~256 MB) — see the Events ingest section below.
 
 GitHub Secrets (Repo → **Settings → Secrets and variables → Actions → Secrets**):
 
@@ -123,7 +123,9 @@ Once set, every push to `main` or `claude/terrawatch-redesign-dMM0l` that touche
 
 ## Events ingest pipeline (Phase 8)
 
-The `events` table is a unified feed that backs the Home "Recent events" strip and the Explore list. Rows come from USGS earthquakes, NOAA NWS alerts (US), and NOAA SWPC Kp. Writing happens exclusively via the `ingest-events` edge function using the service-role key; anonymous clients have SELECT-only RLS so the feed renders without sign-in.
+The `events` table is a unified feed that backs the Home "Recent events" strip and the Explore list. Rows come from USGS earthquakes (incl. tsunamis), NOAA NWS alerts (US), NOAA SWPC Kp, NASA EONET wildfires, and USGS HANS volcanoes. Writing happens exclusively via the per-source `ingest-{seismic,weather,space,wildfires,volcanoes}` edge functions using the service-role key; anonymous clients have SELECT-only RLS so the feed renders without sign-in.
+
+> **Why per-source functions?** Phase 9.0 ran a single monolithic `ingest-events` worker. Even after sequential pipelining, chunked upserts, smaller upstream feeds, and a 500-row cap, the combined parsed payloads (NWS alerts with full descriptions and polygon geometries are the worst offender) kept tripping Supabase's per-invocation memory cap with `WORKER_RESOURCE_LIMIT`. Phase 9.0.1 split into five independent workers — each gets the full ~256 MB budget, failures stay scoped per source, and pg_cron staggers them by minute so DB load is even.
 
 ### One-time setup
 
@@ -137,21 +139,82 @@ The `events` table is a unified feed that backs the Home "Recent events" strip a
 
    Save the same value as the `INGEST_SECRET` GitHub Secret so the cron workflow can send it in the `x-ingest-secret` header.
 
-3. **Enable the cron** — the `.github/workflows/ingest-events-cron.yml` workflow runs every 10 minutes once the repo has the `SUPABASE_PROJECT_REF` and `INGEST_SECRET` secrets. First run: push the workflow file, then **Actions tab → Ingest events (cron) → Run workflow** to backfill immediately (scheduled runs take a few minutes to kick in on a new repo).
+3. **Enable the scheduler** — see the pg_cron subsection below. The primary 10-minute schedule runs inside Postgres; GitHub Actions' `schedule` trigger proved too flaky (delayed activation, throttling under load) to back a user-visible feed.
+
+### pg_cron scheduler (primary)
+
+Migration `0007_split_ingest_cron.sql` enables `pg_cron` + `pg_net` and schedules five staggered hourly jobs — one per source — that POST to their respective edge functions. Before the schedules can actually call the functions, **the shared secret + five function URLs need to live in Supabase Vault**. This is the one manual step, done once per project:
+
+```sql
+-- In Supabase Dashboard → SQL Editor, run:
+
+-- The shared ingest secret (only needed once; reused by all functions).
+select vault.create_secret(
+  '<the-same-hex-string-you-set-as-INGEST_SECRET>',
+  'ingest_secret'
+);
+
+-- One URL per function. Replace <ref> with your Supabase project ref.
+select vault.create_secret('https://<ref>.supabase.co/functions/v1/ingest-seismic',   'ingest_seismic_url');
+select vault.create_secret('https://<ref>.supabase.co/functions/v1/ingest-weather',   'ingest_weather_url');
+select vault.create_secret('https://<ref>.supabase.co/functions/v1/ingest-space',     'ingest_space_url');
+select vault.create_secret('https://<ref>.supabase.co/functions/v1/ingest-wildfires', 'ingest_wildfires_url');
+select vault.create_secret('https://<ref>.supabase.co/functions/v1/ingest-volcanoes', 'ingest_volcanoes_url');
+```
+
+`vault.create_secret` is idempotent on name conflict (it errors); re-running is safe — just skip rows you already have. The legacy `ingest_events_url` row from the monolith era can be deleted at your leisure (harmless if left).
+
+Verify the schedules are active:
+
+```sql
+select jobname, schedule, active from cron.job order by jobname;
+-- expected: five active rows
+--   ingest-seismic-hourly    '0 * * * *'
+--   ingest-weather-hourly    '2 * * * *'
+--   ingest-space-hourly      '4 * * * *'
+--   ingest-wildfires-hourly  '6 * * * *'
+--   ingest-volcanoes-hourly  '8 * * * *'
+```
+
+Inspect recent runs (per source):
+
+```sql
+select jobname, status, return_message, start_time, end_time
+from cron.job_run_details
+order by start_time desc
+limit 25;
+```
+
+Pause / resume one source:
+
+```sql
+select cron.unschedule('ingest-weather-hourly');   -- pause just NWS
+-- to resume, re-apply migration 0007 (idempotent) or re-run the relevant cron.schedule(...) statement
+```
+
+If the secrets aren't set, the trigger functions return `null` and log a notice — schedules will continue firing but do nothing, so set the Vault secrets first.
 
 ### Manual ingest
 
-For local testing or to force a refresh:
+For on-demand refresh (debugging or forcing a backfill), call any single source directly:
 
 ```bash
+# Substitute one of: ingest-seismic, ingest-weather, ingest-space, ingest-wildfires, ingest-volcanoes
 curl -sS -X POST \
-  "https://<project-ref>.supabase.co/functions/v1/ingest-events" \
+  "https://<project-ref>.supabase.co/functions/v1/ingest-seismic" \
   -H "x-ingest-secret: $INGEST_SECRET" \
   -H "content-type: application/json" \
   --data '{}' | jq
 ```
 
-Expected response: `{ ok: true, durationMs: ..., results: { seismic: {...}, weather: {...}, space: {...} }, pruned: N }`.
+Or trigger from inside Postgres (uses the Vault secrets, same path the cron takes):
+
+```sql
+select public.trigger_ingest_seismic();   -- returns a pg_net request id
+-- then poll: select * from net._http_response order by created desc limit 1;
+```
+
+Expected response per function: `{ ok: true, source: 'seismic', durationMs: ..., result: { attempted, upserted, skipped, error: null } }`. `ok: false` means that source errored — check Supabase → Edge Functions → that function's Logs for the full stack trace. One source failing no longer blocks the others.
 
 ### Client behavior
 
@@ -164,7 +227,9 @@ Expected response: `{ ok: true, durationMs: ..., results: { seismic: {...}, weat
 - **Build succeeds but sign-in silently fails** — `VITE_SUPABASE_*` env vars weren't set before the build. `VITE_*` vars are baked in at build time; set them in Worker settings and **Retry deployment**.
 - **Custom domain shows "SSL pending"** — normal for the first ~5 minutes after attaching. If it's still pending after an hour, confirm the zone status is **Active** and the nameserver change actually propagated (`dig NS terrawatchapp.com`).
 - **Service worker caches old build** — `vite-plugin-pwa` is set to `autoUpdate`; a hard reload clears it. If stale builds become a pattern we can add a "new version available" toast.
-- **Events feed is empty on the deployed app** — the ingest cron hasn't run yet or `INGEST_SECRET` doesn't match between Supabase and GitHub. Check **Actions → Ingest events (cron) → latest run** — HTTP 403 = secret mismatch, HTTP 500 = service-role missing from Supabase. The client falls back to live APIs in the meantime so the UI still renders.
+- **Events feed is empty on the deployed app** — the pg_cron schedules aren't running or Vault secrets aren't set. Check `select * from cron.job_run_details order by start_time desc limit 10;` — `status='failed'` with a message like "missing vault secrets" means you haven't inserted all six `vault.create_secret(...)` rows (one shared secret + five URLs). If scheduling works but a source still fails, open **Supabase → Edge Functions → that function → Logs** for the per-source error. The client falls back to live APIs in the meantime so the UI still renders.
+- **One source missing while others populate** — the per-source split means `nws.alerts` failing doesn't stop `usgs.quakes` from writing. Find the failing function in `cron.job_run_details` (it'll be the only `failed` row) and read its dedicated log stream.
+- **`WORKER_RESOURCE_LIMIT` after we already split** — should be very rare now, but if it returns, the offending source's payload has grown beyond a single function's budget. Either lower `MAX_ROWS_PER_SOURCE` in `_shared/ingest-common.ts`, narrow the upstream feed (e.g. tighter NWS limit), or split that source further (e.g. split NWS into `ingest-weather-watches` vs `ingest-weather-warnings`).
 - **`supabase db push` fails in the deploy workflow** — `SUPABASE_DB_PASSWORD` is wrong or missing. Reset it in Supabase → Project Settings → Database and update the GitHub Secret.
 
 ## Migrating away from the old Hostinger FTP workflow
