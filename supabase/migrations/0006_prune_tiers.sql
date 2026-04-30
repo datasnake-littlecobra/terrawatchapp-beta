@@ -42,7 +42,14 @@ $$;
 -- Keep the old signature callable from legacy callers (edge function passes no
 -- args after this migration, but pg_cron or manual calls with the old signature
 -- won't break).
-create or replace function public.events_prune(older_than_days integer)
+--
+-- NOTE: must DROP first. The original signature in 0002 had `default 30`, and
+-- Postgres rejects CREATE OR REPLACE FUNCTION when it would remove a parameter
+-- default (SQLSTATE 42P13). Dropping is safe because the new edge functions
+-- call the no-arg `events_prune()` exclusively.
+drop function if exists public.events_prune(integer);
+
+create function public.events_prune(older_than_days integer)
 returns integer
 language sql
 security definer
