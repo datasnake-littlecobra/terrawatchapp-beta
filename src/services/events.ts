@@ -85,6 +85,33 @@ export async function fetchEventsNear(opts: FetchEventsOptions): Promise<FeedEve
   return rows.map(rowToFeedEvent)
 }
 
+export interface FetchAllEventsOptions {
+  sinceHours?: number
+  maxRows?:    number
+  category?:   string
+  severity?:   'safe' | 'caution' | 'danger'
+}
+
+export async function fetchAllEvents(opts: FetchAllEventsOptions = {}): Promise<FeedEvent[]> {
+  if (!supabase) throw new Error('Supabase not configured')
+  let query = supabase
+    .from('events')
+    .select('id, source, external_id, kind, category, severity, title, summary, lat, lon, location_label, country, region, magnitude, depth_km, kp, occurred_at, expires_at, payload')
+    .order('occurred_at', { ascending: false })
+    .limit(opts.maxRows ?? 500)
+
+  if (opts.sinceHours) {
+    const since = new Date(Date.now() - opts.sinceHours * 3_600_000).toISOString()
+    query = query.gte('occurred_at', since)
+  }
+  if (opts.category)  query = query.eq('category', opts.category)
+  if (opts.severity)  query = query.eq('severity', opts.severity)
+
+  const { data, error } = await query
+  if (error) throw new Error(error.message)
+  return ((data ?? []) as EventsNearRow[]).map(rowToFeedEvent)
+}
+
 export function canUseEventsDb(): boolean {
   return supabaseConfigured
 }
