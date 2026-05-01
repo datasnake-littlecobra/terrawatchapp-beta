@@ -92,22 +92,17 @@ export interface FetchAllEventsOptions {
   severity?:   'safe' | 'caution' | 'danger'
 }
 
+// Calls the events_recent RPC (migration 0008). The events table stores
+// location as PostGIS geography(point) — there are no lat/lon columns to
+// select directly, hence the RPC.
 export async function fetchAllEvents(opts: FetchAllEventsOptions = {}): Promise<FeedEvent[]> {
   if (!supabase) throw new Error('Supabase not configured')
-  let query = supabase
-    .from('events')
-    .select('id, source, external_id, kind, category, severity, title, summary, lat, lon, location_label, country, region, magnitude, depth_km, kp, occurred_at, expires_at, payload')
-    .order('occurred_at', { ascending: false })
-    .limit(opts.maxRows ?? 500)
-
-  if (opts.sinceHours) {
-    const since = new Date(Date.now() - opts.sinceHours * 3_600_000).toISOString()
-    query = query.gte('occurred_at', since)
-  }
-  if (opts.category)  query = query.eq('category', opts.category)
-  if (opts.severity)  query = query.eq('severity', opts.severity)
-
-  const { data, error } = await query
+  const { data, error } = await supabase.rpc('events_recent', {
+    since_hours:     opts.sinceHours ?? 168,
+    max_rows:        opts.maxRows    ?? 500,
+    category_filter: opts.category   ?? null,
+    severity_filter: opts.severity   ?? null,
+  })
   if (error) throw new Error(error.message)
   return ((data ?? []) as EventsNearRow[]).map(rowToFeedEvent)
 }

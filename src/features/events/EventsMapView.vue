@@ -40,6 +40,13 @@ const filtered = computed(() => {
   return ev
 })
 
+// Live severity counts — drive the corner pills, update with filters.
+const severityCounts = computed(() => {
+  const c = { danger: 0, caution: 0, safe: 0 }
+  for (const e of filtered.value) c[e.severity]++
+  return c
+})
+
 const severityColor: Record<string, string> = {
   danger:  '#FF6B6B',
   caution: '#F5B74A',
@@ -131,11 +138,24 @@ onBeforeUnmount(() => {
       <EventsFilters v-model="filters" />
     </div>
 
-    <!-- legend -->
-    <div class="absolute bottom-20 lg:bottom-6 right-4 z-10 bg-surface-1/90 backdrop-blur rounded-lg border border-white/10 px-3 py-2 text-xs space-y-1">
-      <div v-for="[sev, color] in [['Extreme', '#FF6B6B'], ['Warning', '#F5B74A'], ['Advisory', '#3DDC97']]" :key="sev" class="flex items-center gap-2">
-        <span class="w-2.5 h-2.5 rounded-full shrink-0" :style="{ background: color }" />
-        <span class="text-ink-muted">{{ sev }}</span>
+    <!-- Severity count pills (top-right) -->
+    <div class="absolute top-4 right-4 z-10 flex flex-col gap-1.5 items-end">
+      <div class="bg-surface-1/95 backdrop-blur rounded-lg border border-white/10 px-3 py-2 flex gap-3 text-xs">
+        <div class="flex items-center gap-1.5">
+          <span class="w-2.5 h-2.5 rounded-full bg-danger" />
+          <span class="num font-semibold text-ink-primary">{{ severityCounts.danger }}</span>
+          <span class="text-ink-muted">Extreme</span>
+        </div>
+        <div class="flex items-center gap-1.5">
+          <span class="w-2.5 h-2.5 rounded-full bg-caution" />
+          <span class="num font-semibold text-ink-primary">{{ severityCounts.caution }}</span>
+          <span class="text-ink-muted">Warning</span>
+        </div>
+        <div class="flex items-center gap-1.5">
+          <span class="w-2.5 h-2.5 rounded-full bg-safe" />
+          <span class="num font-semibold text-ink-primary">{{ severityCounts.safe }}</span>
+          <span class="text-ink-muted">Advisory</span>
+        </div>
       </div>
     </div>
 

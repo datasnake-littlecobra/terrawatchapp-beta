@@ -14,15 +14,64 @@ function update(patch: Partial<FiltersState>) {
   emit('update:modelValue', { ...props.modelValue, ...patch })
 }
 
-const categoryOptions = [
-  { id: 'earthquake',       label: 'Earthquakes' },
-  { id: 'tornado',          label: 'Tornadoes' },
-  { id: 'flood',            label: 'Floods' },
-  { id: 'wildfire',         label: 'Wildfires' },
-  { id: 'volcano',          label: 'Volcanoes' },
-  { id: 'storm',            label: 'Storms' },
-  { id: 'geomagnetic_storm',label: 'Geomagnetic' },
-  { id: 'weather_alert',    label: 'Weather alerts' },
+// Grouped to match what the ingest pipeline actually emits today
+// (USGS quakes, EONET wildfires, NOAA Kp, USGS volcanoes, NWS alerts via
+// nwsCategory in _shared/ingest-common.ts). Adding a new ingester later
+// = add one row here.
+interface CategoryGroup { label: string; items: { id: string; label: string }[] }
+const categoryGroups: CategoryGroup[] = [
+  {
+    label: 'Geological',
+    items: [
+      { id: 'earthquake', label: 'Earthquakes' },
+      { id: 'volcano',    label: 'Volcanoes' },
+      { id: 'tsunami',    label: 'Tsunamis' },
+    ],
+  },
+  {
+    label: 'Severe Weather',
+    items: [
+      { id: 'tornado',   label: 'Tornadoes' },
+      { id: 'hurricane', label: 'Hurricanes' },
+      { id: 'storm',     label: 'Thunderstorms' },
+      { id: 'flood',     label: 'Floods' },
+    ],
+  },
+  {
+    label: 'Winter & Heat',
+    items: [
+      { id: 'winter_storm', label: 'Winter storms' },
+      { id: 'heat',         label: 'Heat advisories' },
+    ],
+  },
+  {
+    label: 'Fire',
+    items: [
+      { id: 'wildfire',     label: 'Wildfires' },
+      { id: 'fire_weather', label: 'Fire weather' },
+    ],
+  },
+  {
+    label: 'Marine & Wind',
+    items: [
+      { id: 'marine', label: 'Marine alerts' },
+      { id: 'wind',   label: 'Wind events' },
+    ],
+  },
+  {
+    label: 'Space',
+    items: [
+      { id: 'geomagnetic_storm', label: 'Geomagnetic storms' },
+    ],
+  },
+  {
+    label: 'Other',
+    items: [
+      { id: 'avalanche',     label: 'Avalanches' },
+      { id: 'air_quality',   label: 'Air quality' },
+      { id: 'weather_alert', label: 'Other weather alerts' },
+    ],
+  },
 ]
 
 const severityOptions = [
@@ -90,22 +139,27 @@ function clearAll() {
         <!-- dropdown -->
         <div
           v-if="catOpen"
-          class="absolute left-0 top-full mt-1 z-20 bg-surface-2 border border-white/10 rounded-xl shadow-xl p-2 min-w-[180px]"
+          class="absolute left-0 top-full mt-1 z-20 bg-surface-2 border border-white/10 rounded-xl shadow-xl p-2 min-w-[220px] max-h-[60vh] overflow-y-auto"
           @click.stop
         >
-          <label
-            v-for="opt in categoryOptions"
-            :key="opt.id"
-            class="flex items-center gap-2.5 px-2 py-1.5 rounded-lg cursor-pointer hover:bg-white/5 text-sm text-ink-primary"
-          >
-            <input
-              type="checkbox"
-              class="accent-accent"
-              :checked="modelValue.categories.includes(opt.id)"
-              @change="toggleCategory(opt.id)"
-            />
-            {{ opt.label }}
-          </label>
+          <div v-for="group in categoryGroups" :key="group.label" class="mb-2 last:mb-0">
+            <p class="px-2 pt-1 pb-1 text-[10px] font-semibold tracking-widest uppercase text-ink-muted/60">
+              {{ group.label }}
+            </p>
+            <label
+              v-for="opt in group.items"
+              :key="opt.id"
+              class="flex items-center gap-2.5 px-2 py-1.5 rounded-lg cursor-pointer hover:bg-white/5 text-sm text-ink-primary"
+            >
+              <input
+                type="checkbox"
+                class="accent-accent"
+                :checked="modelValue.categories.includes(opt.id)"
+                @change="toggleCategory(opt.id)"
+              />
+              {{ opt.label }}
+            </label>
+          </div>
         </div>
       </div>
 

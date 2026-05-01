@@ -1,12 +1,14 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
 import { useEvents } from '@/composables/useEvents'
-import EventRow from './EventRow.vue'
+import EventCard from './EventCard.vue'
+import EventDetailModal from './EventDetailModal.vue'
 import Button from '@/ui/Button.vue'
 import { en } from '@/i18n/en'
-import type { FeedEventKind } from '@/types/dataSource'
+import type { FeedEvent, FeedEventKind } from '@/types/dataSource'
 
 const { events, loading, error, reload } = useEvents()
+const selected = ref<FeedEvent | null>(null)
 
 type Filter = 'all' | FeedEventKind
 const activeFilter = ref<Filter>('all')
@@ -55,8 +57,10 @@ const filters: { id: Filter; label: string }[] = [
 
     <ul class="space-y-2.5">
       <li v-for="e in filtered" :key="e.id">
-        <EventRow :event="e" />
+        <EventCard :event="e" @select="selected = $event" />
       </li>
     </ul>
   </div>
+
+  <EventDetailModal :event="selected" @close="selected = null" />
 </template>
