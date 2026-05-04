@@ -164,6 +164,8 @@ select vault.create_secret('https://<ref>.supabase.co/functions/v1/ingest-volcan
 select vault.create_secret('https://<ref>.supabase.co/functions/v1/ingest-gdacs',       'ingest_gdacs_url');
 -- Phase 9.2.2 — Smithsonian Global Volcanism Program weekly report.
 select vault.create_secret('https://<ref>.supabase.co/functions/v1/ingest-smithsonian', 'ingest_smithsonian_url');
+-- Phase 9.2.3a — NOAA National Hurricane Center (Atlantic + E. Pacific).
+select vault.create_secret('https://<ref>.supabase.co/functions/v1/ingest-nhc',         'ingest_nhc_url');
 ```
 
 `vault.create_secret` is idempotent on name conflict (it errors); re-running is safe — just skip rows you already have. The legacy `ingest_events_url` row from the monolith era can be deleted at your leisure (harmless if left).
@@ -172,7 +174,7 @@ Verify the schedules are active:
 
 ```sql
 select jobname, schedule, active from cron.job order by jobname;
--- expected: seven active rows
+-- expected: eight active rows
 --   ingest-seismic-hourly       '0 * * * *'
 --   ingest-weather-hourly       '2 * * * *'
 --   ingest-space-hourly         '4 * * * *'
@@ -180,6 +182,7 @@ select jobname, schedule, active from cron.job order by jobname;
 --   ingest-volcanoes-hourly     '8 * * * *'
 --   ingest-gdacs-hourly         '10 * * * *'
 --   ingest-smithsonian-hourly   '12 * * * *'
+--   ingest-nhc-hourly           '14 * * * *'
 ```
 
 Inspect recent runs (per source):

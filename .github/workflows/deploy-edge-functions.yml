@@ -64,3 +64,6 @@ jobs:
 
       - name: Deploy ingest-smithsonian
         run: supabase functions deploy ingest-smithsonian --no-verify-jwt=true
+
+      - name: Deploy ingest-nhc
+        run: supabase functions deploy ingest-nhc --no-verify-jwt=true

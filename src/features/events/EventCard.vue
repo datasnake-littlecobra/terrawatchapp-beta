@@ -33,6 +33,7 @@ const sourceLabels: Record<string, string> = {
   'usgs.volcanoes':  'USGS',
   'gdacs.alerts':    'GDACS',
   'smithsonian.gvp': 'GVP',
+  'noaa.nhc':        'NHC',
 }
 
 function sourceLabel(id: string): string {
