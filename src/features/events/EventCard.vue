@@ -31,6 +31,7 @@ const sourceLabels: Record<string, string> = {
   'noaa.swpc.kp':  'NOAA',
   'nasa.eonet':    'NASA',
   'usgs.volcanoes':'USGS',
+  'gdacs.alerts':  'GDACS',
 }
 
 function sourceLabel(id: string): string {
