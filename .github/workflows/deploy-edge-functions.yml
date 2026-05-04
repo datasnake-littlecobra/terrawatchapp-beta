@@ -61,3 +61,6 @@ jobs:
 
       - name: Deploy ingest-gdacs
         run: supabase functions deploy ingest-gdacs --no-verify-jwt=true
+
+      - name: Deploy ingest-smithsonian
+        run: supabase functions deploy ingest-smithsonian --no-verify-jwt=true

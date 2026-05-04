@@ -26,12 +26,13 @@ const categoryIcons: Record<string, string> = {
 }
 
 const sourceLabels: Record<string, string> = {
-  'usgs.quakes':   'USGS',
-  'nws.alerts':    'NOAA',
-  'noaa.swpc.kp':  'NOAA',
-  'nasa.eonet':    'NASA',
-  'usgs.volcanoes':'USGS',
-  'gdacs.alerts':  'GDACS',
+  'usgs.quakes':     'USGS',
+  'nws.alerts':      'NOAA',
+  'noaa.swpc.kp':    'NOAA',
+  'nasa.eonet':      'NASA',
+  'usgs.volcanoes':  'USGS',
+  'gdacs.alerts':    'GDACS',
+  'smithsonian.gvp': 'GVP',
 }
 
 function sourceLabel(id: string): string {
