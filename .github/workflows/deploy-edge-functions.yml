@@ -58,3 +58,6 @@ jobs:
 
       - name: Deploy ingest-volcanoes
         run: supabase functions deploy ingest-volcanoes --no-verify-jwt=true
+
+      - name: Deploy ingest-gdacs
+        run: supabase functions deploy ingest-gdacs --no-verify-jwt=true

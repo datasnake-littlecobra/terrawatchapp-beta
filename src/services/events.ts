@@ -85,6 +85,28 @@ export async function fetchEventsNear(opts: FetchEventsOptions): Promise<FeedEve
   return rows.map(rowToFeedEvent)
 }
 
+export interface FetchAllEventsOptions {
+  sinceHours?: number
+  maxRows?:    number
+  category?:   string
+  severity?:   'safe' | 'caution' | 'danger'
+}
+
+// Calls the events_recent RPC (migration 0008). The events table stores
+// location as PostGIS geography(point) — there are no lat/lon columns to
+// select directly, hence the RPC.
+export async function fetchAllEvents(opts: FetchAllEventsOptions = {}): Promise<FeedEvent[]> {
+  if (!supabase) throw new Error('Supabase not configured')
+  const { data, error } = await supabase.rpc('events_recent', {
+    since_hours:     opts.sinceHours ?? 168,
+    max_rows:        opts.maxRows    ?? 500,
+    category_filter: opts.category   ?? null,
+    severity_filter: opts.severity   ?? null,
+  })
+  if (error) throw new Error(error.message)
+  return ((data ?? []) as EventsNearRow[]).map(rowToFeedEvent)
+}
+
 export function canUseEventsDb(): boolean {
   return supabaseConfigured
 }

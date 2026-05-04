@@ -1,10 +1,14 @@
 <script setup lang="ts">
+import { ref } from 'vue'
 import { RouterLink } from 'vue-router'
-import AlertPill from '@/ui/AlertPill.vue'
+import EventCard from './EventCard.vue'
+import EventDetailModal from './EventDetailModal.vue'
 import { useEvents } from '@/composables/useEvents'
 import { en } from '@/i18n/en'
+import type { FeedEvent } from '@/types/dataSource'
 
 const { nearest, loading, error } = useEvents()
+const selected = ref<FeedEvent | null>(null)
 </script>
 
 <template>
@@ -14,7 +18,7 @@ const { nearest, loading, error } = useEvents()
         {{ en.events.nearbyTitle }}
       </h2>
       <RouterLink
-        to="/explore?view=list"
+        to="/events"
         class="text-accent text-xs font-medium hover:underline"
       >
         {{ en.events.seeAll }} →
@@ -31,23 +35,10 @@ const { nearest, loading, error } = useEvents()
 
     <ul v-else class="space-y-2">
       <li v-for="e in nearest" :key="e.id">
-        <RouterLink
-          to="/explore?view=list"
-          class="block card p-3 hover:bg-surface-2 transition-colors"
-        >
-          <div class="flex items-center justify-between gap-3">
-            <div class="min-w-0">
-              <div class="flex items-center gap-2">
-                <AlertPill :tone="e.severity" :label="en.events.kind[e.kind]" />
-                <span v-if="e.distanceKm !== undefined" class="num text-ink-muted text-xs">
-                  {{ e.distanceKm.toFixed(0) }} {{ en.common.km }}
-                </span>
-              </div>
-              <p class="font-medium text-sm mt-1.5 truncate">{{ e.title }}</p>
-            </div>
-          </div>
-        </RouterLink>
+        <EventCard :event="e" @select="selected = $event" />
       </li>
     </ul>
   </section>
+
+  <EventDetailModal :event="selected" @close="selected = null" />
 </template>

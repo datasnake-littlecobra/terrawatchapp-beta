@@ -14,9 +14,12 @@ import {
   type EventRow,
 } from '../_shared/ingest-common.ts'
 
-const NWS_ALERTS_FEED = 'https://api.weather.gov/alerts/active?limit=200'
+// NWS rejects User-Agents that don't start with a product token (RFC 7231).
+// Earlier we sent only the parenthesized contact info and got 400 Bad Request
+// on every request. The product token before the comment is what NWS keys on.
+const NWS_ALERTS_FEED = 'https://api.weather.gov/alerts/active?status=actual&limit=200'
 const NWS_HEADERS: Record<string, string> = {
-  'user-agent': '(terrawatchapp.com, ops@terrawatchapp.com)',
+  'user-agent': 'terrawatch/1.0 (https://terrawatchapp.com, ops@terrawatchapp.com)',
   accept: 'application/geo+json',
 }
 
