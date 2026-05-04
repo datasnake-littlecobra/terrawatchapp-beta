@@ -166,6 +166,17 @@ select vault.create_secret('https://<ref>.supabase.co/functions/v1/ingest-gdacs'
 select vault.create_secret('https://<ref>.supabase.co/functions/v1/ingest-smithsonian', 'ingest_smithsonian_url');
 -- Phase 9.2.3a — NOAA National Hurricane Center (Atlantic + E. Pacific).
 select vault.create_secret('https://<ref>.supabase.co/functions/v1/ingest-nhc',         'ingest_nhc_url');
+-- Phase 9.2.4 — OpenAQ global air quality (PM2.5 readings ≥55 µg/m³).
+select vault.create_secret('https://<ref>.supabase.co/functions/v1/ingest-openaq',      'ingest_openaq_url');
+```
+
+OpenAQ also accepts an optional API key for higher rate limits. Without it
+the public limit is ~60 req/min (plenty for hourly ingest); with it you get
+2000 req/min. Register free at https://explore.openaq.org/register and set
+as an edge-function secret (not in Vault):
+
+```bash
+supabase secrets set OPENAQ_API_KEY=<your-key>
 ```
 
 `vault.create_secret` is idempotent on name conflict (it errors); re-running is safe — just skip rows you already have. The legacy `ingest_events_url` row from the monolith era can be deleted at your leisure (harmless if left).
@@ -174,7 +185,7 @@ Verify the schedules are active:
 
 ```sql
 select jobname, schedule, active from cron.job order by jobname;
--- expected: eight active rows
+-- expected: nine active rows
 --   ingest-seismic-hourly       '0 * * * *'
 --   ingest-weather-hourly       '2 * * * *'
 --   ingest-space-hourly         '4 * * * *'
@@ -183,6 +194,7 @@ select jobname, schedule, active from cron.job order by jobname;
 --   ingest-gdacs-hourly         '10 * * * *'
 --   ingest-smithsonian-hourly   '12 * * * *'
 --   ingest-nhc-hourly           '14 * * * *'
+--   ingest-openaq-hourly        '16 * * * *'
 ```
 
 Inspect recent runs (per source):

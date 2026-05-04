@@ -34,6 +34,7 @@ const sourceLabels: Record<string, string> = {
   'gdacs.alerts':    'GDACS',
   'smithsonian.gvp': 'GVP',
   'noaa.nhc':        'NHC',
+  'openaq.pm25':     'OpenAQ',
 }
 
 function sourceLabel(id: string): string {

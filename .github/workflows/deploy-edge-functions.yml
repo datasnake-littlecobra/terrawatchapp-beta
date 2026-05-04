@@ -67,3 +67,6 @@ jobs:
 
       - name: Deploy ingest-nhc
         run: supabase functions deploy ingest-nhc --no-verify-jwt=true
+
+      - name: Deploy ingest-openaq
+        run: supabase functions deploy ingest-openaq --no-verify-jwt=true
