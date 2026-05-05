@@ -15,6 +15,7 @@ const sections = [
   {
     label: 'Monitoring',
     items: [
+      { to: '/alerts',     icon: 'bell',     label: 'Alerts' },
       { to: '/events',     icon: 'globe',    label: 'Global Events' },
       { to: '/events/map', icon: 'map-pin',  label: 'Events Map' },
       { to: '/ocean',      icon: 'waves',    label: 'Ocean Monitoring', soon: true },
@@ -97,6 +98,10 @@ const sections = [
                    stroke-linecap="round" stroke-linejoin="round" class="w-4 h-4 shrink-0">
                 <template v-if="item.icon === 'globe'">
                   <circle cx="12" cy="12" r="9"/><path d="M2 12h20M12 2a15 15 0 0 1 0 20M12 2a15 15 0 0 0 0 20"/>
+                </template>
+                <template v-else-if="item.icon === 'bell'">
+                  <path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/>
+                  <path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/>
                 </template>
                 <template v-else-if="item.icon === 'map-pin'">
                   <path d="M20 10c0 6-8 12-8 12S4 16 4 10a8 8 0 1 1 16 0Z"/><circle cx="12" cy="10" r="2.5"/>

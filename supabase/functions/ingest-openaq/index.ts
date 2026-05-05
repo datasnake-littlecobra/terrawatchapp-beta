@@ -68,6 +68,26 @@ function pmLabel(value: number): string {
   return 'Moderate'
 }
 
+// Convert PM2.5 µg/m³ to US EPA AQI via the standard piecewise-linear
+// breakpoints (40 CFR Part 58, Appendix G). Returns 0-500.
+function pmToAqi(pm: number): number {
+  const breakpoints: Array<[number, number, number, number]> = [
+    [0.0,    12.0,   0,   50],
+    [12.1,   35.4,  51,  100],
+    [35.5,   55.4, 101,  150],
+    [55.5,  150.4, 151,  200],
+    [150.5, 250.4, 201,  300],
+    [250.5, 350.4, 301,  400],
+    [350.5, 500.4, 401,  500],
+  ]
+  for (const [cLow, cHigh, iLow, iHigh] of breakpoints) {
+    if (pm >= cLow && pm <= cHigh) {
+      return Math.round(((iHigh - iLow) / (cHigh - cLow)) * (pm - cLow) + iLow)
+    }
+  }
+  return pm > 500.4 ? 500 : 0
+}
+
 // OpenAQ accepts an optional API key via X-API-Key header. Without one the
 // public rate limit kicks in around 60 req/min, which is plenty for hourly
 // ingest but we set the header when we have it.
@@ -147,6 +167,7 @@ async function ingestOpenaq(): Promise<EventRow[]> {
       loc?.locality || loc?.name || `${lat.toFixed(2)}°, ${lon.toFixed(2)}°`
     const country = loc?.country?.name ?? null
     const label = pmLabel(value)
+    const aqi = pmToAqi(value)
 
     rows.push({
       source: 'openaq.pm25',
@@ -155,7 +176,7 @@ async function ingestOpenaq(): Promise<EventRow[]> {
       category: 'air_quality',
       severity: pmSeverity(value),
       title: `Air quality ${label}: ${placeName}`,
-      summary: `PM2.5 reading of ${value.toFixed(0)} µg/m³ — ${label} per US EPA AQI`,
+      summary: `AQI ${aqi} (${label}) — PM2.5 reading of ${value.toFixed(0)} µg/m³`,
       location: { lat, lon },
       location_label: placeName,
       country,
@@ -167,6 +188,7 @@ async function ingestOpenaq(): Promise<EventRow[]> {
       expires_at: null,
       payload: {
         pm25_ugm3: value,
+        aqi_us_epa: aqi,
         epa_label: label,
         sensor_id: r.sensorsId ?? null,
         location_id: r.locationsId,

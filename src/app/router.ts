@@ -7,7 +7,7 @@ const routes: RouteRecordRaw[] = [
   { path: '/events/map',     name: 'events-map',     component: () => import('@/features/events/EventsMapView.vue') },
   { path: '/travel',         name: 'travel',         component: () => import('@/features/travel/TravelView.vue') },
   { path: '/travel/verdict', name: 'travel-verdict', component: () => import('@/features/travel/VerdictView.vue') },
-  { path: '/alerts',         name: 'alerts',         component: () => import('@/features/guidance/AlertsView.vue') },
+  { path: '/alerts',         name: 'alerts',         component: () => import('@/features/alerts/AlertsView.vue') },
   { path: '/shelters',       name: 'shelters',       component: () => import('@/features/guidance/SheltersView.vue') },
   { path: '/bookmarks',      name: 'bookmarks',      component: () => import('@/features/bookmarks/BookmarksView.vue') },
   {
