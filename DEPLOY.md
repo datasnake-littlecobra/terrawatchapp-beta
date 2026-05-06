@@ -82,9 +82,43 @@ Get both from Supabase → **Project Settings → API**. Set them in **Cloudflar
 
 1. **Run the migration**: `supabase/migrations/0001_auth_bookmarks_asktq.sql` — creates the `bookmarks` and `ask_terra_usage` tables with RLS. Apply via `supabase db push` (CLI) or paste into Supabase → SQL Editor.
 2. **Enable magic-link auth**: Supabase → **Authentication → Providers → Email** → ensure **Email link** is on. Optionally disable "Confirm email" for a one-tap flow.
-3. **Add the app's URLs** under Authentication → **URL Configuration**:
-   - Site URL: `https://terrawatchapp.com`
-   - Redirect URLs: `https://terrawatchapp.com/auth/callback`, `https://terrawatchapp-beta.<account>.workers.dev/auth/callback`, `http://localhost:5173/auth/callback`
+3. **Phase 10 — enable email + password auth**: Same screen, ensure **Email and password** is also on. Default password rules are fine; the SignInView enforces 8+ chars client-side too.
+4. **Phase 10 — enable Google OAuth** (instructions below in the "Google OAuth" subsection).
+5. **Add the app's URLs** under Authentication → **URL Configuration**:
+   - **Site URL**: `https://hyperlocalwatch.com` (or your primary domain)
+   - **Redirect URLs** (one per line):
+     - `https://hyperlocalwatch.com/auth/callback`
+     - `https://hyperlocalwatch.com/auth/reset`
+     - `https://terrawatchapp.com/auth/callback` (preemptive for cutover)
+     - `https://terrawatchapp.com/auth/reset`
+     - `https://terrawatchapp-beta.<account>.workers.dev/auth/callback`
+     - `http://localhost:5173/auth/callback`
+     - `http://localhost:5173/auth/reset`
+
+### Google OAuth (Phase 10)
+
+Supabase needs an OAuth client from Google Cloud to authenticate users via Google. One-time setup:
+
+1. **Google Cloud → APIs & Services → Credentials → Create Credentials → OAuth client ID**.
+   - Application type: **Web application**
+   - Authorized JavaScript origins: `https://hyperlocalwatch.com`, `https://<your-supabase-ref>.supabase.co`
+   - Authorized redirect URIs: `https://<your-supabase-ref>.supabase.co/auth/v1/callback` (this is Supabase's GoTrue endpoint, not the app's `/auth/callback` — Supabase handles the hop and bounces back to the app's redirect)
+2. Copy the **Client ID** and **Client secret**.
+3. Supabase → **Authentication → Providers → Google** → enable, paste both values, save.
+4. Optionally configure the OAuth consent screen branding (logo, support email, privacy URL) in Google Cloud — what users see when granting access.
+
+Verify: visit `/auth/sign-in`, click "Continue with Google" → consent screen shows TerraWatch's name → first time creates the account, subsequent times reuses it. Identities link automatically to existing users by verified email, so an email-magic-link account merges with a Google sign-in for the same address.
+
+### Email templates (Phase 10)
+
+Supabase → **Authentication → Email Templates** — four templates customise sender branding:
+
+- **Confirm signup** — sent after sign-up. Body's `{{ .ConfirmationURL }}` should point to `/auth/callback`.
+- **Magic link** — same as today.
+- **Reset password** — `{{ .ConfirmationURL }}` points to `/auth/reset`.
+- **Change email** — `/auth/callback`.
+
+Default templates work fine for beta; revisit with branded HTML when shipping public.
 
 ### Ask Terra edge function
 

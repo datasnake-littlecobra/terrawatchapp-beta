@@ -35,6 +35,7 @@ const routes: RouteRecordRaw[] = [
   },
   { path: '/auth/sign-in',   name: 'sign-in',        component: () => import('@/features/auth/SignInView.vue') },
   { path: '/auth/callback',  name: 'auth-callback',  component: () => import('@/features/auth/AuthCallbackView.vue') },
+  { path: '/auth/reset',     name: 'auth-reset',     component: () => import('@/features/auth/ResetPasswordView.vue') },
   { path: '/about',          name: 'about',          component: () => import('@/features/fundraiser/AboutView.vue') },
   { path: '/blog',           name: 'blog',           component: () => import('@/features/blog/BlogIndexView.vue') },
   { path: '/blog/:slug',     name: 'blog-post',      component: () => import('@/features/blog/BlogPostView.vue') },
