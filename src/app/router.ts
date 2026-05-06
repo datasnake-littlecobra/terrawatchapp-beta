@@ -12,8 +12,11 @@ const routes: RouteRecordRaw[] = [
   { path: '/bookmarks',      name: 'bookmarks',      component: () => import('@/features/bookmarks/BookmarksView.vue') },
   {
     path: '/ocean', name: 'ocean',
-    component: () => import('@/features/stubs/ComingSoonView.vue'),
-    props: { title: 'Ocean Monitoring', subtitle: 'Real-time data from buoys, tidal sensors, and the DataSnake underwater fleet — coming soon.', icon: 'waves' },
+    component: () => import('@/features/monitoring/OceanDashboardView.vue'),
+  },
+  {
+    path: '/monitoring/ocean', name: 'monitoring-ocean',
+    component: () => import('@/features/monitoring/OceanDashboardView.vue'),
   },
   {
     path: '/submarines', name: 'submarines',

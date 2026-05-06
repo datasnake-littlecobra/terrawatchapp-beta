@@ -70,3 +70,6 @@ jobs:
 
       - name: Deploy ingest-openaq
         run: supabase functions deploy ingest-openaq --no-verify-jwt=true
+
+      - name: Deploy ingest-ndbc
+        run: supabase functions deploy ingest-ndbc --no-verify-jwt=true

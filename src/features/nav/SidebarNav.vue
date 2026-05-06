@@ -18,7 +18,7 @@ const sections = [
       { to: '/alerts',     icon: 'bell',     label: 'Alerts' },
       { to: '/events',     icon: 'globe',    label: 'Global Events' },
       { to: '/events/map', icon: 'map-pin',  label: 'Events Map' },
-      { to: '/ocean',      icon: 'waves',    label: 'Ocean Monitoring', soon: true },
+      { to: '/ocean',      icon: 'waves',    label: 'Ocean Monitoring' },
     ],
   },
   {

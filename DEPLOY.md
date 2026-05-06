@@ -168,6 +168,8 @@ select vault.create_secret('https://<ref>.supabase.co/functions/v1/ingest-smiths
 select vault.create_secret('https://<ref>.supabase.co/functions/v1/ingest-nhc',         'ingest_nhc_url');
 -- Phase 9.2.4 — OpenAQ global air quality (PM2.5 readings ≥55 µg/m³).
 select vault.create_secret('https://<ref>.supabase.co/functions/v1/ingest-openaq',      'ingest_openaq_url');
+-- Phase 9.6 — NOAA NDBC ocean buoys (time-series → measurements table).
+select vault.create_secret('https://<ref>.supabase.co/functions/v1/ingest-ndbc',        'ingest_ndbc_url');
 ```
 
 **OpenAQ v3 requires an API key** — recent breaking change in Q1 2026; the
@@ -225,7 +227,7 @@ Verify the schedules are active:
 
 ```sql
 select jobname, schedule, active from cron.job order by jobname;
--- expected: nine active rows
+-- expected: 12 active rows (10 ingesters + 2 monitoring jobs)
 --   ingest-seismic-hourly       '0 * * * *'
 --   ingest-weather-hourly       '2 * * * *'
 --   ingest-space-hourly         '4 * * * *'
@@ -235,6 +237,9 @@ select jobname, schedule, active from cron.job order by jobname;
 --   ingest-smithsonian-hourly   '12 * * * *'
 --   ingest-nhc-hourly           '14 * * * *'
 --   ingest-openaq-hourly        '16 * * * *'
+--   ingest-ndbc-hourly          '18 * * * *'
+--   measurements-hourly-refresh '*/30 * * * *'   (Phase 9.6)
+--   measurements-prune-nightly  '17 3 * * *'     (Phase 9.6)
 ```
 
 Inspect recent runs (per source):
