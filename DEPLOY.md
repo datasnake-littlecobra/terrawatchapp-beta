@@ -120,20 +120,26 @@ Supabase → **Authentication → Email Templates** — four templates customise
 
 Default templates work fine for beta; revisit with branded HTML when shipping public.
 
-### Ask Terra edge function
+### Ask Terra edge functions
 
-`supabase/functions/ask-terra/` proxies Anthropic Claude so the API key never touches the client. It needs two secrets set **in Supabase** (not in Cloudflare):
+Two functions share the `ANTHROPIC_API_KEY` secret:
+
+- `supabase/functions/ask-terra/` — trip-verdict explainer (Phase 7).
+  Daily quota controlled by `ASK_TERRA_DAILY_LIMIT` (default 5).
+- `supabase/functions/ask-terra-chat/` — Phase 9.3 free-form chat with
+  multi-turn history + RAG over `events_recent`. Daily quota controlled
+  by `TERRA_CHAT_DAILY_LIMIT` (default 10).
 
 ```bash
 supabase secrets set ANTHROPIC_API_KEY=sk-ant-...
-# SUPABASE_SERVICE_ROLE_KEY is set automatically by the platform.
-```
-
-Optionally tune the daily per-user quota (default 5):
-
-```bash
+# Optional tuning:
 supabase secrets set ASK_TERRA_DAILY_LIMIT=10
+supabase secrets set TERRA_CHAT_DAILY_LIMIT=20
 ```
+
+The chat function relies on migration `0017_terra_chat.sql` for the
+`terra_conversations` / `terra_messages` / `terra_chat_usage` tables —
+applied automatically by the deploy workflow on push.
 
 ### Auto-deploying migrations + edge functions
 

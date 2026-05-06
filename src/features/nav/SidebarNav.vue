@@ -31,6 +31,7 @@ const sections = [
   {
     label: 'Tools',
     items: [
+      { to: '/ask',       icon: 'message',        label: 'Ask Terra' },
       { to: '/travel',    icon: 'navigation',     label: 'Travel Advisory' },
       { to: '/bookmarks', icon: 'bookmark',       label: 'Bookmarks' },
       { to: '/discover',  icon: 'compass',        label: 'Discover', soon: true },
@@ -127,6 +128,9 @@ const sections = [
                 </template>
                 <template v-else-if="item.icon === 'pen'">
                   <path d="M12 19h9"/><path d="M16.5 3.5a2.121 2.121 0 1 1 3 3L7 19l-4 1 1-4Z"/>
+                </template>
+                <template v-else-if="item.icon === 'message'">
+                  <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
                 </template>
                 <template v-else-if="item.icon === 'heart'">
                   <path d="M20.8 4.6a5.5 5.5 0 0 0-7.8 0L12 5.7l-1-1.1a5.5 5.5 0 0 0-7.8 7.8l1 1L12 21l7.8-7.6 1-1a5.5 5.5 0 0 0 0-7.8Z"/>
