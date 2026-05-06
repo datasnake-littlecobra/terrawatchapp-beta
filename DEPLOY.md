@@ -170,14 +170,54 @@ select vault.create_secret('https://<ref>.supabase.co/functions/v1/ingest-nhc', 
 select vault.create_secret('https://<ref>.supabase.co/functions/v1/ingest-openaq',      'ingest_openaq_url');
 ```
 
-OpenAQ also accepts an optional API key for higher rate limits. Without it
-the public limit is ~60 req/min (plenty for hourly ingest); with it you get
-2000 req/min. Register free at https://explore.openaq.org/register and set
-as an edge-function secret (not in Vault):
+**OpenAQ v3 requires an API key** — recent breaking change in Q1 2026; the
+ingester returns 401 silently without one, leaving `air_quality` empty in
+the events feed. Register free at https://explore.openaq.org/register and
+set as an edge-function secret (not Vault):
 
 ```bash
 supabase secrets set OPENAQ_API_KEY=<your-key>
 ```
+
+After rotating, redeploy the function so it picks up the new env:
+
+```bash
+supabase functions deploy ingest-openaq --no-verify-jwt=true
+```
+
+### Diagnosing missing data
+
+If a source isn't producing rows, run these in order — one of them always
+points at the actual problem:
+
+```sql
+-- A. Did all Vault URL secrets get inserted?
+select name from vault.decrypted_secrets
+where name like 'ingest_%_url'
+order by name;
+-- Expect rows for every ingester you've shipped. Missing = run vault.create_secret(...).
+
+-- B. Are crons firing successfully?
+select jobname, status, return_message, start_time
+from cron.job_run_details
+order by start_time desc limit 30;
+-- 'failed' rows tell you what's wrong (missing vault secret, function error, etc).
+
+-- C. Per-source row counts (last 24h)
+select source, count(*), max(occurred_at) as latest
+from public.events
+where occurred_at >= now() - interval '24 hours'
+group by source order by 2 desc;
+
+-- D. Per-category row counts (drives the dropdown's auto-grey UX from 9.5)
+select * from public.events_category_counts(30);
+-- Categories with 0 rows render greyed in the UI.
+```
+
+For source-specific failures, also check Edge Function logs:
+**Supabase Dashboard → Edge Functions → <name> → Logs**. Look for
+`HTTP 401` (auth), `HTTP 5xx` (upstream down), or `[ingest:<name>]`
+prefixed warnings (parser issues).
 
 `vault.create_secret` is idempotent on name conflict (it errors); re-running is safe — just skip rows you already have. The legacy `ingest_events_url` row from the monolith era can be deleted at your leisure (harmless if left).
 

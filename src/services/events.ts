@@ -107,6 +107,23 @@ export async function fetchAllEvents(opts: FetchAllEventsOptions = {}): Promise<
   return ((data ?? []) as EventsNearRow[]).map(rowToFeedEvent)
 }
 
+// Phase 9.5: per-category counts that drive the dropdown's auto-grey UX.
+// 30-day window is generous enough to keep seasonal categories from
+// flickering off on transitional days.
+export interface CategoryCount { category: string; rows: number }
+
+export async function fetchCategoryCounts(windowDays = 30): Promise<CategoryCount[]> {
+  if (!supabase) return []
+  const { data, error } = await supabase.rpc('events_category_counts', {
+    window_days: windowDays,
+  })
+  if (error) throw new Error(error.message)
+  return ((data ?? []) as Array<{ category: string; rows: number | string }>).map((r) => ({
+    category: r.category,
+    rows: Number(r.rows),
+  }))
+}
+
 export function canUseEventsDb(): boolean {
   return supabaseConfigured
 }
