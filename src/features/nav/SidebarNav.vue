@@ -45,6 +45,14 @@ const sections = computed<NavSection[]>(() => {
       ],
     },
     {
+      label: 'Research',
+      items: [
+        { to: '/research/atmosphere',     icon: 'sparkle', label: 'Atmosphere' },
+        { to: '/research/ocean',          icon: 'waves',   label: 'Ocean' },
+        { to: '/research/seismic-hazard', icon: 'pen',     label: 'Seismic hazard' },
+      ],
+    },
+    {
       label: 'Tools',
       items: [
         { to: '/ask',       icon: 'message',        label: 'Ask Terra' },
@@ -61,8 +69,9 @@ const sections = computed<NavSection[]>(() => {
     base.push({
       label: 'Admin',
       items: [
-        { to: '/admin/blog',     icon: 'pen',     label: 'Blog dashboard' },
-        { to: '/admin/blog/new', icon: 'sparkle', label: 'Generate post' },
+        { to: '/admin/blog',     icon: 'pen',      label: 'Blog dashboard' },
+        { to: '/admin/blog/new', icon: 'sparkle',  label: 'Generate post' },
+        { to: '/admin/health',   icon: 'bell',     label: 'Ingest health' },
       ],
     })
   }

@@ -327,8 +327,21 @@ GitHub Secrets (Repo → **Settings → Secrets and variables → Actions → Se
 | `SUPABASE_PROJECT_REF` | The 20-character project ref in your project URL (`https://<ref>.supabase.co`) |
 | `SUPABASE_DB_PASSWORD` | Supabase → **Project Settings → Database → Connection string → Password** (the one you set at project creation; reset it there if you don't remember) |
 | `INGEST_SECRET` | Any long random string — paste the same value into `supabase secrets set INGEST_SECRET=...` (see Events ingest section below). |
+| `SUPABASE_URL_PUBLIC` (optional) | Same value as `VITE_SUPABASE_URL`. Powers the nightly health-check workflow's PostgREST queries. Without it the workflow runs only the page-reachability + OG-injector checks. |
+| `SUPABASE_ANON_KEY_PUBLIC` (optional) | Same value as `VITE_SUPABASE_ANON_KEY`. Pairs with the secret above. |
 
 Once set, every push to `main` or `claude/terrawatch-redesign-dMM0l` that touches those paths auto-applies the migration **and** redeploys both functions.
+
+### Nightly health-check workflow (Phase 9.10 Tier B)
+
+`.github/workflows/nightly-health-check.yml` runs at 07:00 UTC daily and can be triggered manually from the Actions tab. It:
+
+1. Pings `/`, `/events`, `/alerts`, `/blog`, `/monitoring/ocean`, and the three `/research/*` views; flags any non-200.
+2. Verifies the OG worker injected per-post `og:title` for `/blog/why-we-built-terrawatch`.
+3. Calls the public `research_counters` RPC and `events_recent` RPC to confirm Supabase + ingesters are alive.
+4. Posts a Markdown report into the workflow run's **Step Summary** so you can read the result without leaving GitHub.
+
+To enable the optional Supabase data-freshness checks, add `SUPABASE_URL_PUBLIC` + `SUPABASE_ANON_KEY_PUBLIC` to GitHub Secrets (same values as the `VITE_*` env vars — both are public-by-design). Without them the workflow still does the curl checks; it just skips the data-freshness lines.
 
 ## Events ingest pipeline (Phase 8)
 

@@ -41,11 +41,19 @@ const routes: RouteRecordRaw[] = [
   { path: '/blog',           name: 'blog',           component: () => import('@/features/blog/BlogIndexView.vue') },
   { path: '/blog/:slug',     name: 'blog-post',      component: () => import('@/features/blog/BlogPostView.vue') },
 
+  // Phase 9.11 — research / investor analytics dashboards. Public-readable
+  // (RPCs are anon-grantable). The DataSnake gap callouts on each page
+  // are the investor narrative anchor.
+  { path: '/research/atmosphere',     name: 'research-atmosphere',     component: () => import('@/features/research/AtmosphereDashboardView.vue') },
+  { path: '/research/ocean',          name: 'research-ocean',          component: () => import('@/features/research/OceanResearchDashboardView.vue') },
+  { path: '/research/seismic-hazard', name: 'research-seismic-hazard', component: () => import('@/features/research/SeismicHazardDashboardView.vue') },
+  { path: '/research',                redirect: '/research/atmosphere' },
+
   // Phase 9.8 — admin signup is OUTSIDE the gated /admin/* layout because
   // a non-admin user must be able to reach it (that's the whole point).
   { path: '/admin/sign-up',  name: 'admin-sign-up',  component: () => import('@/features/admin/AdminSignUpView.vue') },
 
-  // Phase 9.8 / 9.9 — admin-gated routes. AdminLayout enforces auth +
+  // Phase 9.8 / 9.9 / 9.10 — admin-gated routes. AdminLayout enforces auth +
   // is_admin role and conditionally renders the matched child view.
   {
     path: '/admin',
@@ -56,6 +64,7 @@ const routes: RouteRecordRaw[] = [
       { path: 'blog',      name: 'admin-blog',     component: () => import('@/features/admin/AdminBlogListView.vue') },
       { path: 'blog/new',  name: 'admin-blog-new', component: () => import('@/features/admin/AdminBlogGeneratorView.vue') },
       { path: 'blog/:id',  name: 'admin-blog-edit',component: () => import('@/features/admin/AdminBlogEditView.vue') },
+      { path: 'health',    name: 'admin-health',   component: () => import('@/features/admin/AdminHealthView.vue') },
     ],
   },
 
