@@ -51,6 +51,12 @@ jobs:
       - name: Deploy generate-blog
         run: supabase functions deploy generate-blog --no-verify-jwt=false
 
+      # Phase 9.8 follow-up — single-call admin signup. Anonymous endpoint
+      # (the admin signup code is the gating factor); skips Supabase's
+      # email-confirmation friction by creating users with email_confirm=true.
+      - name: Deploy signup-admin
+        run: supabase functions deploy signup-admin --no-verify-jwt=true
+
       # Phase 9.0.1 — per-source ingest functions. Each is invoked by pg_cron
       # via the shared `x-ingest-secret` header (no Supabase JWT).
       - name: Deploy ingest-seismic

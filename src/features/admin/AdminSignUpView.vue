@@ -1,26 +1,31 @@
 <script setup lang="ts">
-// TerraWatch — Phase 9.8: admin signup surface.
+// TerraWatch — Phase 9.8 follow-up: friction-free admin signup.
 //
 // Two flows handled here:
 //
-// 1. New admin signup — collects email + password + admin code. Creates
-//    a Supabase user, then immediately calls redeem_admin_code(code) to
-//    promote them. If the code is wrong, we DO leave a regular user
-//    account behind (the signup itself succeeded); we surface that
-//    clearly so the user can retry the redeem with a different code, or
-//    just sign out.
+// 1. NEW ADMIN — visitor is anonymous. Form collects email + password +
+//    admin code. We call the supabase/functions/signup-admin edge
+//    function which creates the auth user with email_confirm=true (no
+//    inbox round-trip), validates the admin code server-side, and sets
+//    user_profiles.role='admin' atomically. On success we sign the user
+//    in with their just-created credentials and route to /admin/blog.
 //
-// 2. Promote existing account — user is already signed in but not admin
-//    (landed here from AdminLayout's "promote with admin code" CTA). We
-//    skip the signup step, just call redeem_admin_code(code).
+// 2. PROMOTE EXISTING — visitor is already signed in but not admin
+//    (typically arrives here from AdminLayout's "promote with admin
+//    code" CTA). We call the redeem_admin_code RPC to flip the role.
 //
-// After successful redeem, we route to /admin/blog.
+// The two-step legacy flow (sign up via supabase.auth then redeem)
+// breaks when Supabase email confirmation is on, because the user can't
+// get a JWT until they click the email — which they often don't get
+// because Supabase free-tier email is unreliable. The new flow bypasses
+// all of that.
 
 import { computed, ref } from 'vue'
 import { RouterLink, useRouter } from 'vue-router'
 import Card from '@/ui/Card.vue'
 import Button from '@/ui/Button.vue'
 import { useAuthStore } from '@/stores/auth'
+import { signupAdmin, AdminSignupError } from '@/services/adminSignup'
 
 const auth = useAuthStore()
 const router = useRouter()
@@ -59,27 +64,41 @@ async function submit() {
         return
       }
       if (!code.value.trim()) {
-        codeError.value = 'Admin code is required.'
+        codeError.value = 'Admin signup code is required.'
         return
       }
-      const { requiresConfirmation } = await auth.signUpWithPassword(e, p)
-      if (requiresConfirmation) {
-        // Account exists but not signed-in yet (email confirm enabled in
-        // Supabase Auth settings). The redeem RPC needs an authed JWT,
-        // so we surface the situation honestly.
-        localError.value =
-          'Account created. Please confirm your email, then sign in and revisit /admin/sign-up to redeem the admin code.'
-        return
+
+      // Single-call: create + promote, no email confirmation needed.
+      try {
+        await signupAdmin({ email: e, password: p, code: code.value.trim() })
+      } catch (err) {
+        if (err instanceof AdminSignupError) {
+          if (err.status === 403) {
+            codeError.value = 'Invalid admin signup code. Contact whoever shared the link.'
+            return
+          }
+          localError.value = err.message
+          return
+        }
+        throw err
       }
+
+      // Sign in with the just-created credentials so the user lands on
+      // /admin/blog already authenticated.
+      await auth.signInWithPassword(e, p)
+      success.value = true
+      setTimeout(() => router.replace('/admin/blog'), 600)
+      return
     }
 
+    // mode === 'promote': existing logged-in user wants admin role.
     const ok = await auth.redeemAdminCode(code.value.trim())
     if (!ok) {
-      codeError.value = 'Invalid admin code. Contact the admin who shared the link.'
+      codeError.value = 'Invalid admin signup code. Contact whoever shared the link.'
       return
     }
     success.value = true
-    setTimeout(() => router.replace('/admin/blog'), 800)
+    setTimeout(() => router.replace('/admin/blog'), 600)
   } catch (e) {
     localError.value = e instanceof Error ? e.message : 'Sign-up failed.'
   } finally {
@@ -97,12 +116,12 @@ async function submit() {
       </h1>
       <p class="text-ink-muted text-sm mt-2">
         <template v-if="mode === 'signup'">
-          Create an admin account. After signup, you'll be able to publish, hide, and edit blog
-          posts from inside the app.
+          Create an admin account using your email + password + the shared admin signup code.
+          You'll be signed in immediately — no email confirmation needed for admin signups.
         </template>
         <template v-else>
           You're signed in as <span class="text-ink-primary">{{ auth.email }}</span>.
-          Enter the admin code to promote this account.
+          Enter the admin signup code to grant this account admin privileges.
         </template>
       </p>
     </header>
@@ -157,18 +176,19 @@ async function submit() {
         </template>
 
         <label class="block">
-          <span class="text-ink-muted text-xs tracking-widest uppercase">Admin code</span>
+          <span class="text-ink-muted text-xs tracking-widest uppercase">Admin signup code</span>
           <input
             v-model="code"
             type="text"
             required
             autocomplete="off"
-            placeholder="Shared admin signup code"
+            placeholder="The shared code you set in Supabase Vault"
             class="mt-1 w-full bg-surface-0 border border-white/10 rounded-xl h-12 px-3 text-base font-mono"
           />
           <span class="text-[10px] text-ink-muted/60 mt-1 block">
-            Stored once in Supabase Vault as <code>admin_signup_code</code>. Rotate by updating
-            the Vault row.
+            Set once in Supabase SQL Editor:
+            <code>select vault.create_secret('your-code', 'admin_signup_code');</code>
+            See DEPLOY.md → "Admin role + blog admin UI" for full setup.
           </span>
         </label>
 
@@ -185,7 +205,7 @@ async function submit() {
     <p v-if="mode === 'signup'" class="text-ink-muted text-xs mt-4">
       Already an admin?
       <RouterLink to="/auth/sign-in" class="text-accent">Sign in</RouterLink>
-      — admin accounts log in via the regular sign-in surface too.
+      — admin accounts log in via the regular sign-in surface too (same credentials).
     </p>
   </div>
 </template>

@@ -2,8 +2,15 @@
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "terrawatchapp-beta",
   "compatibility_date": "2026-04-19",
+  // Phase 9.8.1 — script intercepts /blog/:slug to inject per-post OG meta
+  // for non-JS social crawlers (LinkedIn, Reddit, WhatsApp, Facebook).
+  // All other requests pass through to ASSETS unchanged.
+  // Required env vars (Worker → Settings → Variables and Secrets):
+  //   SUPABASE_URL, SUPABASE_ANON_KEY (plaintext, both public-by-design).
+  "main": "worker/index.js",
   "assets": {
     "directory": "./dist",
+    "binding": "ASSETS",
     "not_found_handling": "single-page-application"
   }
 }

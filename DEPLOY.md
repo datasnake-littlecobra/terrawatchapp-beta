@@ -177,21 +177,41 @@ update vault.secrets
  where name = 'admin_signup_code';
 ```
 
-**Bootstrapping the first admin**:
+**Bootstrapping the first admin** (after Phase 9.8 follow-up — single-call flow):
 
 1. Set the Vault secret as above.
 2. Visit `https://hyperlocalwatch.com/admin/sign-up`.
 3. Enter email + password + the Vault secret you just set.
-4. After signup, the page calls `redeem_admin_code(...)`. On match, your
-   `user_profiles.role` flips to `admin` and you're redirected to
-   `/admin/blog`.
+4. The page calls the `signup-admin` edge function which creates your
+   account with `email_confirm=true` (no inbox needed) AND sets
+   `user_profiles.role='admin'` atomically. You're signed in and routed
+   to `/admin/blog` automatically.
 5. Subsequently, log in via the regular `/auth/sign-in` — same
    credentials work for both surfaces.
 
-If you ever need to demote an admin manually, run:
+**If you signed up earlier and got stuck** (signed up but never received
+the confirmation email and now hit "invalid credentials" on sign-in),
+you have two recovery paths:
 
 ```sql
-update public.user_profiles set role = 'user' where user_id = '<uuid>';
+-- Option A: Just confirm + promote your existing account.
+-- Run in Supabase SQL Editor.
+update auth.users
+   set email_confirmed_at = now(),
+       confirmed_at       = now()
+ where email = 'YOUR_EMAIL_HERE'
+   and email_confirmed_at is null;
+
+update public.user_profiles
+   set role = 'admin'
+ where user_id = (select id from auth.users where email = 'YOUR_EMAIL_HERE');
+```
+
+```sql
+-- Option B: Wipe the stuck account and re-signup via /admin/sign-up
+-- with the new single-call flow.
+delete from auth.users where email = 'YOUR_EMAIL_HERE';
+-- Then visit /admin/sign-up again.
 ```
 
 To list current admins:
@@ -203,18 +223,92 @@ select up.user_id, u.email, up.role
  where up.role = 'admin';
 ```
 
-### Per-post OG meta limitation (Phase 9.8)
+To demote an admin:
 
-`src/composables/useMeta.ts` updates `<title>`, `og:*`, and `twitter:*`
-meta tags on route change. **Most social-platform crawlers (LinkedIn,
-Reddit, Facebook) do not execute JavaScript**, so they will see only
-the defaults baked into `index.html` rather than per-post overrides.
-Twitter and Discord run partial JS and may pick up the per-post tags.
+```sql
+update public.user_profiles set role = 'user' where user_id = '<uuid>';
+```
 
-For per-post OG meta to work in non-JS crawlers, deploy a Cloudflare
-Worker that intercepts `/blog/:slug` requests, fetches the matching
-row from `public.blog_posts` via PostgREST, and rewrites the SPA
-shell's meta tags before responding. Tracked as Phase 9.8.1.
+### Email delivery (Supabase free-tier email is unreliable)
+
+Supabase's built-in email is rate-limited and frequently delays
+delivery. The admin-signup flow above sidesteps this by creating users
+with `email_confirm=true`, but **password resets** and **regular user
+signups** still depend on email working. Two paths:
+
+1. **Quickest** — Supabase Dashboard → Authentication → Providers →
+   Email → toggle **"Confirm email" OFF**. Now regular signups don't
+   need email confirmation either. Reduces friction; loses the
+   email-ownership check.
+
+2. **Production-grade** — Configure custom SMTP using a real provider
+   (Resend, Postmark, SendGrid). Free tiers exist:
+   - **Resend** (recommended) — 3,000 emails/month free, simplest setup.
+     Add domain `terrawatchapp.com` → verify the SPF/DKIM records they
+     give you in Cloudflare DNS → grab API key.
+   - Supabase Dashboard → **Authentication → Emails → SMTP Settings**:
+     - Host: `smtp.resend.com`, Port: `465`, Username: `resend`,
+       Password: `<resend-api-key>`,
+     - Sender email: `info@terrawatchapp.com` (or `hello@`, `support@`,
+       `noreply@`),
+     - Sender name: `TerraWatch`.
+   - Save → send a test email to confirm.
+
+Once SMTP is configured, the regular sign-in flow's magic links and
+password resets will deliver reliably from your domain.
+
+To receive replies on those addresses, add Cloudflare Email Routing
+(free): CF Dashboard → terrawatchapp.com → Email → Email Routing → add
+forwarding rules `info@terrawatchapp.com → your-personal-gmail@…` etc.
+
+### Per-post OG meta for social previews (Phase 9.8.1)
+
+A small Cloudflare Worker at `worker/index.js` intercepts `/blog/:slug`
+requests, fetches the post from Supabase via PostgREST (anon key, RLS
+scoped to `published=true`), and rewrites the SPA shell's `<title>`,
+`og:*`, `twitter:*`, and `article:*` meta tags before responding. This
+makes per-post link previews work on **non-JS crawlers** (LinkedIn,
+Reddit, Facebook, WhatsApp) as well as the JS-aware ones already
+covered by the client-side `useMeta` composable.
+
+**One-time Worker env-var setup** (Cloudflare dashboard → Worker
+`terrawatchapp-beta` → **Settings → Variables and Secrets**, both as
+plaintext — they're public-by-design):
+
+| Variable | Value |
+| --- | --- |
+| `SUPABASE_URL` | Same as `VITE_SUPABASE_URL` (e.g. `https://xxx.supabase.co`) |
+| `SUPABASE_ANON_KEY` | Same as `VITE_SUPABASE_ANON_KEY` |
+
+After adding the vars, push any commit (or click "Retry deployment")
+to rebuild the Worker against the new env. Verify with:
+
+```bash
+curl -s https://hyperlocalwatch.com/blog/why-we-built-terrawatch | grep -E 'og:title|og:image|twitter:title'
+```
+
+…you should see per-post `og:title`, `og:description`, `og:url`, and
+(if the post has a `hero_image`) `og:image` tags — not the index.html
+defaults.
+
+**Validating in the platforms themselves**:
+- **LinkedIn** — paste the URL into <https://www.linkedin.com/post-inspector/>
+  and click "Inspect". They cache aggressively; re-inspect after edits.
+- **Twitter / X** — <https://cards-dev.twitter.com/validator>.
+- **Facebook / WhatsApp** — <https://developers.facebook.com/tools/debug/>;
+  WhatsApp uses Facebook's scraper.
+- **Discord / Slack** — paste the URL into a channel; they re-fetch
+  every ~30 minutes.
+
+The Worker has a 5-minute CDN cache. Edits to a published post
+propagate within that window; the social platforms have their own
+caches on top (LinkedIn especially — use post-inspector to refresh).
+
+**For posts to actually show an image** in previews, set the post's
+**Hero image URL** field in `/admin/blog/:id`. Use either an absolute
+HTTPS URL (e.g. CDN-hosted) or a path served from `/public/` (e.g.
+`/images/blog/<slug>.jpg`). LinkedIn requires the image be at least
+1200×627 for the wide-card variant.
 
 ### Auto-deploying migrations + edge functions
 
@@ -335,6 +429,63 @@ For source-specific failures, also check Edge Function logs:
 **Supabase Dashboard → Edge Functions → <name> → Logs**. Look for
 `HTTP 401` (auth), `HTTP 5xx` (upstream down), or `[ingest:<name>]`
 prefixed warnings (parser issues).
+
+**Air-quality (`openaq.pm25`) showing zero rows? Most-likely causes:**
+
+```sql
+-- 1. Is the URL secret present?
+select name from vault.decrypted_secrets where name = 'ingest_openaq_url';
+-- If empty: select vault.create_secret('https://<ref>.supabase.co/functions/v1/ingest-openaq', 'ingest_openaq_url');
+
+-- 2. Did the cron actually run, and what did it return?
+select status, return_message, start_time
+from cron.job_run_details
+where jobname = 'ingest-openaq-hourly'
+order by start_time desc limit 5;
+-- 'HTTP 401' from openaq → API key required. See below.
+-- 'HTTP 5xx' → OpenAQ API is having issues; retry later.
+
+-- 3. Did rows land but get filtered out?
+-- The ingester only stores readings ≥55 µg/m³ PM2.5 (US EPA 'Unhealthy').
+-- Most regions are below that on a clean-air day. Confirm by relaxing
+-- the filter temporarily in supabase/functions/ingest-openaq/index.ts.
+```
+
+**OpenAQ API key requirement (likely root cause):** OpenAQ's v3 API
+now requires a free API key for the `/parameters/2/latest` endpoint
+the ingester uses. Get one at <https://api.openaq.org/register>, then:
+
+```bash
+supabase secrets set OPENAQ_API_KEY=<your-key>
+```
+
+Then re-deploy the ingester (push any commit that touches
+`supabase/functions/ingest-openaq/**`) and watch the next cron run
+succeed.
+
+**"Why is tornado / hurricane / heat / flood / thunderstorm empty?"**
+
+These categories *are* supported via existing ingesters — they just
+fire only during real activity:
+
+| Category | Source | When it fires |
+| --- | --- | --- |
+| `tornado` | NWS alerts | Active US tornado warnings |
+| `hurricane` | NHC + GDACS + NWS | Active Atlantic / E. Pacific cyclones |
+| `heat` | NWS alerts | US heat advisories (June–Sept usually) |
+| `flood` | NWS alerts + GDACS | Active flood/flash-flood warnings |
+| `storm` | NWS alerts (incl. severe thunderstorm warnings) | US severe convective storms |
+| `winter_storm` | NWS alerts | US winter storm warnings (Nov–Mar) |
+| `wildfire` | NASA EONET | Active fires globally |
+| `earthquake` | USGS + GDACS | Always (ambient seismicity) |
+| `volcano` | USGS HANS + Smithsonian GVP + GDACS | Always (continuous unrest reports) |
+| `geomagnetic_storm` | NOAA SWPC | Always (Kp index sample every hour) |
+| `air_quality` | OpenAQ | Stations with PM2.5 ≥55 µg/m³ |
+
+Run query D above (`events_category_counts(30)`) to see which
+categories have rows in the last 30 days. Empty buckets in season
+suggest a quiet period; empty buckets across multiple seasons suggest
+the upstream source is failing — check the cron run history.
 
 `vault.create_secret` is idempotent on name conflict (it errors); re-running is safe — just skip rows you already have. The legacy `ingest_events_url` row from the monolith era can be deleted at your leisure (harmless if left).
 
