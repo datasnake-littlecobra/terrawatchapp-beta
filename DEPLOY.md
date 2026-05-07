@@ -120,26 +120,101 @@ Supabase → **Authentication → Email Templates** — four templates customise
 
 Default templates work fine for beta; revisit with branded HTML when shipping public.
 
-### Ask Terra edge functions
+### Anthropic-backed edge functions
 
-Two functions share the `ANTHROPIC_API_KEY` secret:
+Three functions share the `ANTHROPIC_API_KEY` secret:
 
 - `supabase/functions/ask-terra/` — trip-verdict explainer (Phase 7).
   Daily quota controlled by `ASK_TERRA_DAILY_LIMIT` (default 5).
 - `supabase/functions/ask-terra-chat/` — Phase 9.3 free-form chat with
   multi-turn history + RAG over `events_recent`. Daily quota controlled
   by `TERRA_CHAT_DAILY_LIMIT` (default 10).
+- `supabase/functions/generate-blog/` — Phase 9.9 admin-only blog
+  generator. JWT-gated AND server-side `is_admin()` check. Returns
+  four platform-tailored variants per call (App / LinkedIn / Reddit /
+  Instagram). Daily quota per admin via `GENERATE_BLOG_DAILY_LIMIT`
+  (default 5).
 
 ```bash
 supabase secrets set ANTHROPIC_API_KEY=sk-ant-...
 # Optional tuning:
 supabase secrets set ASK_TERRA_DAILY_LIMIT=10
 supabase secrets set TERRA_CHAT_DAILY_LIMIT=20
+supabase secrets set GENERATE_BLOG_DAILY_LIMIT=10
 ```
 
 The chat function relies on migration `0017_terra_chat.sql` for the
-`terra_conversations` / `terra_messages` / `terra_chat_usage` tables —
-applied automatically by the deploy workflow on push.
+`terra_conversations` / `terra_messages` / `terra_chat_usage` tables.
+The blog generator relies on migrations `0018_user_profiles_admin.sql`
++ `0020_blog_generator_usage.sql`. Both apply automatically on push.
+
+### Admin role + blog admin UI (Phase 9.8)
+
+Migrations `0018` and `0019` add:
+- `public.user_profiles` table with a `role` column (`user` | `admin`),
+  auto-populated for every signup via a trigger on `auth.users`.
+- `public.is_admin()` helper RPC used by RLS policies and the
+  generate-blog edge function.
+- `public.redeem_admin_code(submitted_code)` RPC that promotes the
+  caller to admin if the submitted code matches the Vault-stored
+  `admin_signup_code` secret.
+- `public.blog_posts` table (DB-backed; replaces the Phase 9.7
+  MD-files-in-repo design). Public read via RLS for `published=true`;
+  admin reads/writes everything. The two existing posts are seeded.
+
+**One-time Vault setup** (once per environment) — Supabase Dashboard →
+SQL Editor:
+
+```sql
+select vault.create_secret('<your-shared-admin-signup-code>', 'admin_signup_code');
+```
+
+Pick a long, random code (32+ chars). To rotate later:
+
+```sql
+update vault.secrets
+   set secret = '<new-code>'
+ where name = 'admin_signup_code';
+```
+
+**Bootstrapping the first admin**:
+
+1. Set the Vault secret as above.
+2. Visit `https://hyperlocalwatch.com/admin/sign-up`.
+3. Enter email + password + the Vault secret you just set.
+4. After signup, the page calls `redeem_admin_code(...)`. On match, your
+   `user_profiles.role` flips to `admin` and you're redirected to
+   `/admin/blog`.
+5. Subsequently, log in via the regular `/auth/sign-in` — same
+   credentials work for both surfaces.
+
+If you ever need to demote an admin manually, run:
+
+```sql
+update public.user_profiles set role = 'user' where user_id = '<uuid>';
+```
+
+To list current admins:
+
+```sql
+select up.user_id, u.email, up.role
+  from public.user_profiles up
+  join auth.users u on u.id = up.user_id
+ where up.role = 'admin';
+```
+
+### Per-post OG meta limitation (Phase 9.8)
+
+`src/composables/useMeta.ts` updates `<title>`, `og:*`, and `twitter:*`
+meta tags on route change. **Most social-platform crawlers (LinkedIn,
+Reddit, Facebook) do not execute JavaScript**, so they will see only
+the defaults baked into `index.html` rather than per-post overrides.
+Twitter and Discord run partial JS and may pick up the per-post tags.
+
+For per-post OG meta to work in non-JS crawlers, deploy a Cloudflare
+Worker that intercepts `/blog/:slug` requests, fetches the matching
+row from `public.blog_posts` via PostgREST, and rewrites the SPA
+shell's meta tags before responding. Tracked as Phase 9.8.1.
 
 ### Auto-deploying migrations + edge functions
 

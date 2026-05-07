@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { computed } from 'vue'
 import { RouterLink, useRoute } from 'vue-router'
 import { useSidebar } from '@/composables/useSidebar'
 import { useAuthStore } from '@/stores/auth'
@@ -11,36 +12,62 @@ function isActive(path: string) {
   return route.path === path || route.path.startsWith(path + '/')
 }
 
-const sections = [
-  {
-    label: 'Monitoring',
-    items: [
-      { to: '/alerts',     icon: 'bell',     label: 'Alerts' },
-      { to: '/events',     icon: 'globe',    label: 'Global Events' },
-      { to: '/events/map', icon: 'map-pin',  label: 'Events Map' },
-      { to: '/ocean',      icon: 'waves',    label: 'Ocean Monitoring' },
-    ],
-  },
-  {
-    label: 'Intelligence',
-    items: [
-      { to: '/submarines', icon: 'anchor', label: 'Submarines',   soon: true },
-      { to: '/ufo',        icon: 'eye',    label: 'UFO Sightings', soon: true },
-    ],
-  },
-  {
-    label: 'Tools',
-    items: [
-      { to: '/ask',       icon: 'message',        label: 'Ask Terra' },
-      { to: '/travel',    icon: 'navigation',     label: 'Travel Advisory' },
-      { to: '/bookmarks', icon: 'bookmark',       label: 'Bookmarks' },
-      { to: '/discover',  icon: 'compass',        label: 'Discover', soon: true },
-      { to: '/blog',      icon: 'pen',            label: 'Blog' },
-      { to: '/about',     icon: 'heart',          label: 'Support DataSnake' },
-      { to: '/settings',  icon: 'settings',       label: 'Settings' },
-    ],
-  },
-]
+interface NavItem {
+  to:    string
+  icon:  string
+  label: string
+  soon?: boolean
+}
+interface NavSection {
+  label: string
+  items: NavItem[]
+}
+
+// Phase 9.8: Admin section appears in the sidebar only when the signed-in
+// user has role='admin' (driven by auth.isAdmin which reads from
+// public.user_profiles via the auth store).
+const sections = computed<NavSection[]>(() => {
+  const base: NavSection[] = [
+    {
+      label: 'Monitoring',
+      items: [
+        { to: '/alerts',     icon: 'bell',     label: 'Alerts' },
+        { to: '/events',     icon: 'globe',    label: 'Global Events' },
+        { to: '/events/map', icon: 'map-pin',  label: 'Events Map' },
+        { to: '/ocean',      icon: 'waves',    label: 'Ocean Monitoring' },
+      ],
+    },
+    {
+      label: 'Intelligence',
+      items: [
+        { to: '/submarines', icon: 'anchor', label: 'Submarines',   soon: true },
+        { to: '/ufo',        icon: 'eye',    label: 'UFO Sightings', soon: true },
+      ],
+    },
+    {
+      label: 'Tools',
+      items: [
+        { to: '/ask',       icon: 'message',        label: 'Ask Terra' },
+        { to: '/travel',    icon: 'navigation',     label: 'Travel Advisory' },
+        { to: '/bookmarks', icon: 'bookmark',       label: 'Bookmarks' },
+        { to: '/discover',  icon: 'compass',        label: 'Discover', soon: true },
+        { to: '/blog',      icon: 'pen',            label: 'Blog' },
+        { to: '/about',     icon: 'heart',          label: 'Support DataSnake' },
+        { to: '/settings',  icon: 'settings',       label: 'Settings' },
+      ],
+    },
+  ]
+  if (auth.isAdmin) {
+    base.push({
+      label: 'Admin',
+      items: [
+        { to: '/admin/blog',     icon: 'pen',     label: 'Blog dashboard' },
+        { to: '/admin/blog/new', icon: 'sparkle', label: 'Generate post' },
+      ],
+    })
+  }
+  return base
+})
 </script>
 
 <template>
@@ -128,6 +155,9 @@ const sections = [
                 </template>
                 <template v-else-if="item.icon === 'pen'">
                   <path d="M12 19h9"/><path d="M16.5 3.5a2.121 2.121 0 1 1 3 3L7 19l-4 1 1-4Z"/>
+                </template>
+                <template v-else-if="item.icon === 'sparkle'">
+                  <path d="M12 3v3M12 18v3M3 12h3M18 12h3M5.6 5.6l2.1 2.1M16.3 16.3l2.1 2.1M5.6 18.4l2.1-2.1M16.3 7.7l2.1-2.1"/>
                 </template>
                 <template v-else-if="item.icon === 'message'">
                   <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>

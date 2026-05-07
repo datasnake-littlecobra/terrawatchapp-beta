@@ -1,21 +1,63 @@
 <script setup lang="ts">
-import { computed, watchEffect } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { RouterLink, useRoute, useRouter } from 'vue-router'
-import { getPost, relatedPosts } from '@/services/blog'
+import { getPost, relatedPosts, type BlogPost } from '@/services/blog'
+import CategoryIcon from '@/ui/CategoryIcon.vue'
+import BlogShareButton from './BlogShareButton.vue'
+import { useMeta } from '@/composables/useMeta'
 
 const route = useRoute()
 const router = useRouter()
 
 const slug = computed(() => String(route.params.slug ?? ''))
-const post = computed(() => getPost(slug.value))
-const related = computed(() => post.value ? relatedPosts(post.value.slug, 3) : [])
+const post = ref<BlogPost | null>(null)
+const related = ref<BlogPost[]>([])
+const loading = ref(true)
 
-// Hard-redirect to /blog if slug doesn't resolve. Avoids a stale 404 in
-// router history if the user typo'd the URL.
-watchEffect(() => {
-  if (slug.value && !post.value) {
-    router.replace('/blog')
+watch(
+  slug,
+  async (s) => {
+    if (!s) return
+    loading.value = true
+    try {
+      post.value = await getPost(s)
+      if (post.value) {
+        related.value = await relatedPosts(post.value.slug, 3)
+      } else {
+        // Hard-redirect to /blog if slug doesn't resolve. Avoids a stale
+        // 404 in router history if the user typo'd the URL.
+        router.replace('/blog')
+      }
+    } finally {
+      loading.value = false
+    }
+  },
+  { immediate: true },
+)
+
+useMeta(() => {
+  const p = post.value
+  if (!p) return null
+  const meta: {
+    title: string
+    description: string
+    type: 'article'
+    author: string
+    publishedAt: string
+    image?: string
+  } = {
+    title:       `${p.title} — TerraWatch Blog`,
+    description: p.excerpt,
+    type:        'article',
+    author:      p.author,
+    publishedAt: (p.publishedAt ?? p.date).toISOString(),
   }
+  if (p.heroImage) {
+    meta.image = p.heroImage.startsWith('http')
+      ? p.heroImage
+      : `${window.location.origin}${p.heroImage}`
+  }
+  return meta
 })
 
 function fmtDate(d: Date): string {
@@ -39,20 +81,42 @@ function fmtDate(d: Date): string {
 
     <!-- Header -->
     <header class="mb-8">
-      <div class="flex items-center gap-2 text-xs text-ink-muted mb-3">
+      <div class="flex items-center gap-2 text-xs text-ink-muted mb-3 flex-wrap">
         <span class="num">{{ fmtDate(post.date) }}</span>
         <span>·</span>
-        <span class="uppercase tracking-wider text-[10px] font-semibold text-ink-muted/70">
-          {{ post.category }}
+        <span class="inline-flex items-center gap-1">
+          <CategoryIcon :category="post.category" :size="12" />
+          <span class="uppercase tracking-wider text-[10px] font-semibold text-ink-muted/70">
+            {{ post.category }}
+          </span>
         </span>
         <span>·</span>
         <span class="num">{{ post.readingMinutes }} min read</span>
       </div>
-      <h1 class="text-2xl sm:text-4xl font-semibold text-ink-primary leading-tight">
-        {{ post.title }}
-      </h1>
-      <p class="text-ink-muted text-sm mt-2">By {{ post.author }}</p>
+      <div class="flex items-start justify-between gap-4">
+        <div class="flex-1 min-w-0">
+          <h1 class="text-2xl sm:text-4xl font-semibold text-ink-primary leading-tight">
+            {{ post.title }}
+          </h1>
+          <p class="text-ink-muted text-sm mt-2">By {{ post.author }}</p>
+        </div>
+        <BlogShareButton
+          :title="post.title"
+          :excerpt="post.excerpt"
+          :slug="post.slug"
+          class="shrink-0 mt-1"
+        />
+      </div>
     </header>
+
+    <!-- Hero image (optional) -->
+    <img
+      v-if="post.heroImage"
+      :src="post.heroImage"
+      :alt="post.title"
+      class="w-full rounded-xl mb-8 border border-white/5"
+      loading="lazy"
+    />
 
     <!-- Body — prose styling lives here, not in services/blog.ts -->
     <div
@@ -88,6 +152,10 @@ function fmtDate(d: Date): string {
       </ul>
     </section>
   </article>
+
+  <p v-else-if="loading" class="text-ink-muted text-sm max-w-3xl mx-auto px-4 py-8">
+    Loading…
+  </p>
 </template>
 
 <style>

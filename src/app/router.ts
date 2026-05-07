@@ -40,6 +40,25 @@ const routes: RouteRecordRaw[] = [
   { path: '/ask',            name: 'ask',            component: () => import('@/features/ask/AskTerraView.vue') },
   { path: '/blog',           name: 'blog',           component: () => import('@/features/blog/BlogIndexView.vue') },
   { path: '/blog/:slug',     name: 'blog-post',      component: () => import('@/features/blog/BlogPostView.vue') },
+
+  // Phase 9.8 — admin signup is OUTSIDE the gated /admin/* layout because
+  // a non-admin user must be able to reach it (that's the whole point).
+  { path: '/admin/sign-up',  name: 'admin-sign-up',  component: () => import('@/features/admin/AdminSignUpView.vue') },
+
+  // Phase 9.8 / 9.9 — admin-gated routes. AdminLayout enforces auth +
+  // is_admin role and conditionally renders the matched child view.
+  {
+    path: '/admin',
+    component: () => import('@/features/admin/AdminLayout.vue'),
+    meta: { requiresAdmin: true },
+    children: [
+      { path: '',          redirect: '/admin/blog' },
+      { path: 'blog',      name: 'admin-blog',     component: () => import('@/features/admin/AdminBlogListView.vue') },
+      { path: 'blog/new',  name: 'admin-blog-new', component: () => import('@/features/admin/AdminBlogGeneratorView.vue') },
+      { path: 'blog/:id',  name: 'admin-blog-edit',component: () => import('@/features/admin/AdminBlogEditView.vue') },
+    ],
+  },
+
   { path: '/settings',       name: 'settings',       component: () => import('@/features/guidance/SettingsView.vue') },
   { path: '/:pathMatch(.*)*', redirect: '/' },
 ]

@@ -45,6 +45,12 @@ jobs:
       - name: Deploy ask-terra-chat
         run: supabase functions deploy ask-terra-chat --no-verify-jwt=false
 
+      # Phase 9.9 — admin-only AI blog generator. JWT-gated; the function
+      # itself also checks user_profiles.role='admin' before calling
+      # Anthropic, so a non-admin JWT will get a 403.
+      - name: Deploy generate-blog
+        run: supabase functions deploy generate-blog --no-verify-jwt=false
+
       # Phase 9.0.1 — per-source ingest functions. Each is invoked by pg_cron
       # via the shared `x-ingest-secret` header (no Supabase JWT).
       - name: Deploy ingest-seismic

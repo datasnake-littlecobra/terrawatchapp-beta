@@ -6,6 +6,28 @@
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
     <meta name="theme-color" content="#10B981" />
     <title>TerraWatch — Know the ground you're on.</title>
+
+    <!--
+      Phase 9.8 — default OG / Twitter card meta tags. Per-route overrides
+      are written by src/composables/useMeta.ts on navigation. Most social
+      crawlers (LinkedIn, Reddit, Facebook) don't run JS and only see what's
+      shipped in this shell — until the Phase 9.8.1 Cloudflare Worker OG
+      injector lands, deep blog-post links will fall back to these defaults
+      for those platforms. Twitter and Discord do run partial JS and may
+      pick up the per-post overrides.
+    -->
+    <meta name="description" content="Real-time environmental intelligence — earthquakes, weather, space, ocean — for where you are and where you are going." />
+
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="TerraWatch — Know the ground you're on." />
+    <meta property="og:description" content="Real-time environmental intelligence — earthquakes, weather, space, ocean — for where you are and where you are going." />
+    <meta property="og:url" content="https://hyperlocalwatch.com/" />
+    <meta property="og:site_name" content="TerraWatch" />
+
+    <meta name="twitter:card" content="summary" />
+    <meta name="twitter:title" content="TerraWatch — Know the ground you're on." />
+    <meta name="twitter:description" content="Real-time environmental intelligence — earthquakes, weather, space, ocean — for where you are and where you are going." />
+
     <link rel="preconnect" href="https://rsms.me/" />
     <link rel="stylesheet" href="https://rsms.me/inter/inter.css" />
   </head>
