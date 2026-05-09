@@ -5,7 +5,7 @@
 // the proprietary fleet would resolve. Investor-friendly but not hypey.
 
 defineProps<{
-  domain:    'atmosphere' | 'ocean' | 'seismic'
+  domain:    'atmosphere' | 'ocean' | 'seismic' | 'insurance'
   headline:  string
   body:      string
   // Stat row: one or more (label, value, unit?) tuples. Renders as a
@@ -33,6 +33,11 @@ defineProps<{
           </template>
           <template v-else-if="domain === 'ocean'">
             <path d="M2 8c2-2 4-2 6 0s4 2 6 0 4-2 6 0M2 14c2-2 4-2 6 0s4 2 6 0 4-2 6 0M2 20c2-2 4-2 6 0s4 2 6 0 4-2 6 0"/>
+          </template>
+          <template v-else-if="domain === 'insurance'">
+            <!-- Shield + dollar glyph for insurance/underwriting framing -->
+            <path d="M12 3 4 6v6c0 5 4 8 8 9 4-1 8-4 8-9V6Z"/>
+            <path d="M12 8v8M9.5 10h4a1.5 1.5 0 0 1 0 3h-3a1.5 1.5 0 0 0 0 3h4"/>
           </template>
           <template v-else>
             <path d="M3 12h4l2-7 4 14 2-7h6"/>

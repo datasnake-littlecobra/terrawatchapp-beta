@@ -49,6 +49,11 @@ const routes: RouteRecordRaw[] = [
   { path: '/research/seismic-hazard', name: 'research-seismic-hazard', component: () => import('@/features/research/SeismicHazardDashboardView.vue') },
   { path: '/research',                redirect: '/research/atmosphere' },
 
+  // Phase 9.12 — Insurance MVP. Public dashboard at /insurance — partner
+  // demo + LinkedIn / X share asset. FEMA NRI county-level data plus
+  // live cross-reference to the events pipeline.
+  { path: '/insurance',               name: 'insurance',               component: () => import('@/features/insurance/InsuranceDashboardView.vue') },
+
   // Phase 9.8 — admin signup is OUTSIDE the gated /admin/* layout because
   // a non-admin user must be able to reach it (that's the whole point).
   { path: '/admin/sign-up',  name: 'admin-sign-up',  component: () => import('@/features/admin/AdminSignUpView.vue') },

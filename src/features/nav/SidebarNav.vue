@@ -53,6 +53,12 @@ const sections = computed<NavSection[]>(() => {
       ],
     },
     {
+      label: 'Verticals',
+      items: [
+        { to: '/insurance', icon: 'shield', label: 'Insurance' },
+      ],
+    },
+    {
       label: 'Tools',
       items: [
         { to: '/ask',       icon: 'message',        label: 'Ask Terra' },
@@ -170,6 +176,10 @@ const sections = computed<NavSection[]>(() => {
                 </template>
                 <template v-else-if="item.icon === 'message'">
                   <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
+                </template>
+                <template v-else-if="item.icon === 'shield'">
+                  <path d="M12 3 4 6v6c0 5 4 8 8 9 4-1 8-4 8-9V6Z"/>
+                  <path d="M9.5 11h4a1.5 1.5 0 0 1 0 3h-3a1.5 1.5 0 0 0 0 3h4"/>
                 </template>
                 <template v-else-if="item.icon === 'heart'">
                   <path d="M20.8 4.6a5.5 5.5 0 0 0-7.8 0L12 5.7l-1-1.1a5.5 5.5 0 0 0-7.8 7.8l1 1L12 21l7.8-7.6 1-1a5.5 5.5 0 0 0 0-7.8Z"/>

@@ -88,3 +88,9 @@ jobs:
 
       - name: Deploy ingest-ndbc
         run: supabase functions deploy ingest-ndbc --no-verify-jwt=true
+
+      # Phase 9.12 — one-shot FEMA NRI bulk loader. Triggered manually via
+      # the seed-fema-nri workflow (workflow_dispatch). Same INGEST_SECRET
+      # gate as the other ingesters; no Supabase JWT required.
+      - name: Deploy seed-fema-nri
+        run: supabase functions deploy seed-fema-nri --no-verify-jwt=true

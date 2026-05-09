@@ -565,6 +565,70 @@ Expected response per function: `{ ok: true, source: 'seismic', durationMs: ...,
 
 `src/composables/useEvents.ts` reads via the `events_near` RPC when `VITE_SUPABASE_URL` / `VITE_SUPABASE_ANON_KEY` are set, and transparently falls back to the legacy live-API path (USGS / Open-Meteo / SWPC direct) if the RPC errors or Supabase is unconfigured. The UI never goes blank mid-ingest.
 
+## Insurance MVP — FEMA NRI seeding (Phase 9.12)
+
+The `/insurance` dashboard reads from `public.fema_nri`, a static county-level table seeded from the FEMA National Risk Index. Migrations `0025_fema_nri.sql` and `0026_insurance_rpcs.sql` create the table + five public RPCs. The seed itself is a one-time manual step per FEMA release — re-run yearly when FEMA publishes a new version (typically Q4).
+
+### One-time CSV preparation per release
+
+FEMA distributes the National Risk Index as a ZIP wrapping a CSV. The Deno standard library doesn't ship a ZIP reader, so the `seed-fema-nri` edge function takes a **plain CSV URL**, not the FEMA `.zip`. Operator workflow:
+
+1. Visit https://hazards.fema.gov/nri/data-resources and download the **Counties — CSV** archive (`NRI_Table_Counties.zip`, ~30MB).
+2. Unzip locally — you'll get `NRI_Table_Counties.csv` (~80MB).
+3. Upload the CSV to a publicly-readable URL. Easiest path:
+   - Supabase dashboard → **Storage** → create a bucket called `fema` if it doesn't exist (Public bucket: yes).
+   - Upload `NRI_Table_Counties.csv` to the bucket.
+   - Copy the public URL (right-click the row → **Get URL**).
+
+### Run the seed
+
+Two interchangeable paths:
+
+**a) GitHub Actions (recommended)** — Actions tab → **Seed FEMA NRI** → Run workflow → paste the CSV URL → Run. The workflow POSTs to the edge function with `INGEST_SECRET` and prints the result.
+
+**b) Direct curl** — for ad-hoc reseeding from your machine:
+
+```bash
+curl -sS -X POST \
+  "https://<project-ref>.supabase.co/functions/v1/seed-fema-nri" \
+  -H "x-ingest-secret: $INGEST_SECRET" \
+  -H "content-type: application/json" \
+  --max-time 600 \
+  --data '{ "csv_url": "<public CSV URL>", "dry_run": false }' | jq
+```
+
+Set `dry_run: true` first to validate the CSV parses correctly (returns row counts + a sample row without inserting). Then re-run with `dry_run: false`.
+
+Expected response on success: `{ ok: true, fetched: ~3200, parsed: ~3200, upserted: ~3200, sample: { ... }, error: null }`. The function upserts on `county_fips` so re-running is idempotent.
+
+### Verification
+
+```sql
+-- Should be ~3,200
+select count(*) from public.fema_nri;
+
+-- Sample row
+select * from public.fema_nri where county_fips = '06037';  -- LA County
+
+-- Sanity-check the RPCs that drive the dashboard
+select * from public.insurance_counters();
+select * from public.insurance_top_counties_by_hazard('flood', 10);
+select * from public.insurance_top_counties_by_hazard('wildfire', 10);
+select * from public.insurance_top_counties_by_hazard('hurricane', 10);
+select * from public.insurance_state_eal(20);
+select count(*) from public.insurance_active_threats_in_high_risk(80, 50);
+```
+
+After the seed lands, visit `https://hyperlocalwatch.com/insurance` — hero counters should show ~3,200 counties indexed and a multi-trillion-dollar total EAL. The state EAL bar chart populates immediately; the County Detail panel auto-loads the highest-EAL county.
+
+### Troubleshooting
+
+- **`csv_url not provided`** — pass it in the request body or set the `FEMA_NRI_CSV_URL` env var on the function (`supabase secrets set FEMA_NRI_CSV_URL=...`).
+- **`CSV parsed to 0 valid rows — column-name mismatch?`** — FEMA changed their column headers between releases. The function maps `STCOFIPS` / `COUNTYFIPS` / `GEOID` for the FIPS column, `STATE`, `COUNTY`, plus `<HAZ>_EALT` per hazard. If FEMA renames anything, update `rowFromCsv()` in `supabase/functions/seed-fema-nri/index.ts`.
+- **`502` with timeout error** — the CSV is too large or the upstream URL is slow. Try a smaller test CSV first (`dry_run: true` to confirm parsing) or move the CSV closer (Supabase Storage in the same region).
+- **Hero counters all show 0** — the seed inserted into `fema_nri` but the RPCs aren't returning. Check `select count(*) from public.fema_nri;` directly. If non-zero but the RPCs return empty, the migration didn't grant `execute` to anon — re-apply `0026_insurance_rpcs.sql`.
+- **Active-threat counter stays at 0** — expected if the events table doesn't have any caution/danger severity events from the last 24h that match a high-risk state. Trigger a fresh ingest run or wait for the next hourly cron tick.
+
 ## Troubleshooting
 
 - **`Missing entry-point to Worker script or to assets directory`** — `wrangler.jsonc` missing or malformed. Make sure the file exists at repo root and contains the `assets.directory` field.

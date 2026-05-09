@@ -5,13 +5,20 @@
 // own charts + GapCallout.
 
 defineProps<{
-  domain:    'atmosphere' | 'ocean' | 'seismic'
+  domain:    'atmosphere' | 'ocean' | 'seismic' | 'insurance'
   title:     string
   subtitle:  string
   // Hero counters: 3-4 tiles at the top. Same shape as ocean dashboard.
   counters:  Array<{ label: string; value: string; unit?: string; tone?: 'safe' | 'caution' | 'danger' }>
   // Live-data sources to credit in the footer.
   sources:   string[]
+  // Optional override for the small uppercase eyebrow above the title.
+  // Defaults to "Research · <domain>" for backwards compat with the
+  // three Phase-9.11 research dashboards.
+  eyebrow?:  string
+  // Optional override for the provenance footer copy. Defaults to the
+  // research-dashboard wording.
+  footnote?: string
 }>()
 </script>
 
@@ -21,7 +28,7 @@ defineProps<{
     <header class="flex items-start justify-between gap-3 mb-5">
       <div>
         <p class="text-ink-muted text-xs tracking-widest uppercase">
-          Research · {{ domain }}
+          {{ eyebrow ?? `Research · ${domain}` }}
         </p>
         <h1 class="text-2xl sm:text-3xl font-semibold text-ink-primary mt-1">{{ title }}</h1>
         <p class="text-ink-muted text-sm sm:text-base mt-2 max-w-2xl">{{ subtitle }}</p>
@@ -67,10 +74,7 @@ defineProps<{
         {{ sources.join(' · ') }}
       </p>
       <p class="text-ink-muted/60 text-xs mt-3 leading-relaxed">
-        Data refreshes hourly from the sources above. Aggregates are computed in Postgres at
-        query time — no caches between you and the truth. The proprietary DataSnake fleet
-        layer (oxygen, currents, ground motion, portable AQ) extends each panel below; this
-        view shows the public-data baseline.
+        {{ footnote ?? 'Data refreshes hourly from the sources above. Aggregates are computed in Postgres at query time — no caches between you and the truth. The proprietary DataSnake fleet layer (oxygen, currents, ground motion, portable AQ) extends each panel below; this view shows the public-data baseline.' }}
       </p>
     </footer>
   </div>
