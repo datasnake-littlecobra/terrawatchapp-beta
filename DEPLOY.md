@@ -82,24 +82,233 @@ Get both from Supabase → **Project Settings → API**. Set them in **Cloudflar
 
 1. **Run the migration**: `supabase/migrations/0001_auth_bookmarks_asktq.sql` — creates the `bookmarks` and `ask_terra_usage` tables with RLS. Apply via `supabase db push` (CLI) or paste into Supabase → SQL Editor.
 2. **Enable magic-link auth**: Supabase → **Authentication → Providers → Email** → ensure **Email link** is on. Optionally disable "Confirm email" for a one-tap flow.
-3. **Add the app's URLs** under Authentication → **URL Configuration**:
-   - Site URL: `https://terrawatchapp.com`
-   - Redirect URLs: `https://terrawatchapp.com/auth/callback`, `https://terrawatchapp-beta.<account>.workers.dev/auth/callback`, `http://localhost:5173/auth/callback`
+3. **Phase 10 — enable email + password auth**: Same screen, ensure **Email and password** is also on. Default password rules are fine; the SignInView enforces 8+ chars client-side too.
+4. **Phase 10 — enable Google OAuth** (instructions below in the "Google OAuth" subsection).
+5. **Add the app's URLs** under Authentication → **URL Configuration**:
+   - **Site URL**: `https://hyperlocalwatch.com` (or your primary domain)
+   - **Redirect URLs** (one per line):
+     - `https://hyperlocalwatch.com/auth/callback`
+     - `https://hyperlocalwatch.com/auth/reset`
+     - `https://terrawatchapp.com/auth/callback` (preemptive for cutover)
+     - `https://terrawatchapp.com/auth/reset`
+     - `https://terrawatchapp-beta.<account>.workers.dev/auth/callback`
+     - `http://localhost:5173/auth/callback`
+     - `http://localhost:5173/auth/reset`
 
-### Ask Terra edge function
+### Google OAuth (Phase 10)
 
-`supabase/functions/ask-terra/` proxies Anthropic Claude so the API key never touches the client. It needs two secrets set **in Supabase** (not in Cloudflare):
+Supabase needs an OAuth client from Google Cloud to authenticate users via Google. One-time setup:
+
+1. **Google Cloud → APIs & Services → Credentials → Create Credentials → OAuth client ID**.
+   - Application type: **Web application**
+   - Authorized JavaScript origins: `https://hyperlocalwatch.com`, `https://<your-supabase-ref>.supabase.co`
+   - Authorized redirect URIs: `https://<your-supabase-ref>.supabase.co/auth/v1/callback` (this is Supabase's GoTrue endpoint, not the app's `/auth/callback` — Supabase handles the hop and bounces back to the app's redirect)
+2. Copy the **Client ID** and **Client secret**.
+3. Supabase → **Authentication → Providers → Google** → enable, paste both values, save.
+4. Optionally configure the OAuth consent screen branding (logo, support email, privacy URL) in Google Cloud — what users see when granting access.
+
+Verify: visit `/auth/sign-in`, click "Continue with Google" → consent screen shows TerraWatch's name → first time creates the account, subsequent times reuses it. Identities link automatically to existing users by verified email, so an email-magic-link account merges with a Google sign-in for the same address.
+
+### Email templates (Phase 10)
+
+Supabase → **Authentication → Email Templates** — four templates customise sender branding:
+
+- **Confirm signup** — sent after sign-up. Body's `{{ .ConfirmationURL }}` should point to `/auth/callback`.
+- **Magic link** — same as today.
+- **Reset password** — `{{ .ConfirmationURL }}` points to `/auth/reset`.
+- **Change email** — `/auth/callback`.
+
+Default templates work fine for beta; revisit with branded HTML when shipping public.
+
+### Anthropic-backed edge functions
+
+Three functions share the `ANTHROPIC_API_KEY` secret:
+
+- `supabase/functions/ask-terra/` — trip-verdict explainer (Phase 7).
+  Daily quota controlled by `ASK_TERRA_DAILY_LIMIT` (default 5).
+- `supabase/functions/ask-terra-chat/` — Phase 9.3 free-form chat with
+  multi-turn history + RAG over `events_recent`. Daily quota controlled
+  by `TERRA_CHAT_DAILY_LIMIT` (default 10).
+- `supabase/functions/generate-blog/` — Phase 9.9 admin-only blog
+  generator. JWT-gated AND server-side `is_admin()` check. Returns
+  four platform-tailored variants per call (App / LinkedIn / Reddit /
+  Instagram). Daily quota per admin via `GENERATE_BLOG_DAILY_LIMIT`
+  (default 5).
 
 ```bash
 supabase secrets set ANTHROPIC_API_KEY=sk-ant-...
-# SUPABASE_SERVICE_ROLE_KEY is set automatically by the platform.
+# Optional tuning:
+supabase secrets set ASK_TERRA_DAILY_LIMIT=10
+supabase secrets set TERRA_CHAT_DAILY_LIMIT=20
+supabase secrets set GENERATE_BLOG_DAILY_LIMIT=10
 ```
 
-Optionally tune the daily per-user quota (default 5):
+The chat function relies on migration `0017_terra_chat.sql` for the
+`terra_conversations` / `terra_messages` / `terra_chat_usage` tables.
+The blog generator relies on migrations `0018_user_profiles_admin.sql`
++ `0020_blog_generator_usage.sql`. Both apply automatically on push.
+
+### Admin role + blog admin UI (Phase 9.8)
+
+Migrations `0018` and `0019` add:
+- `public.user_profiles` table with a `role` column (`user` | `admin`),
+  auto-populated for every signup via a trigger on `auth.users`.
+- `public.is_admin()` helper RPC used by RLS policies and the
+  generate-blog edge function.
+- `public.redeem_admin_code(submitted_code)` RPC that promotes the
+  caller to admin if the submitted code matches the Vault-stored
+  `admin_signup_code` secret.
+- `public.blog_posts` table (DB-backed; replaces the Phase 9.7
+  MD-files-in-repo design). Public read via RLS for `published=true`;
+  admin reads/writes everything. The two existing posts are seeded.
+
+**One-time Vault setup** (once per environment) — Supabase Dashboard →
+SQL Editor:
+
+```sql
+select vault.create_secret('<your-shared-admin-signup-code>', 'admin_signup_code');
+```
+
+Pick a long, random code (32+ chars). To rotate later:
+
+```sql
+update vault.secrets
+   set secret = '<new-code>'
+ where name = 'admin_signup_code';
+```
+
+**Bootstrapping the first admin** (after Phase 9.8 follow-up — single-call flow):
+
+1. Set the Vault secret as above.
+2. Visit `https://hyperlocalwatch.com/admin/sign-up`.
+3. Enter email + password + the Vault secret you just set.
+4. The page calls the `signup-admin` edge function which creates your
+   account with `email_confirm=true` (no inbox needed) AND sets
+   `user_profiles.role='admin'` atomically. You're signed in and routed
+   to `/admin/blog` automatically.
+5. Subsequently, log in via the regular `/auth/sign-in` — same
+   credentials work for both surfaces.
+
+**If you signed up earlier and got stuck** (signed up but never received
+the confirmation email and now hit "invalid credentials" on sign-in),
+you have two recovery paths:
+
+```sql
+-- Option A: Just confirm + promote your existing account.
+-- Run in Supabase SQL Editor.
+update auth.users
+   set email_confirmed_at = now(),
+       confirmed_at       = now()
+ where email = 'YOUR_EMAIL_HERE'
+   and email_confirmed_at is null;
+
+update public.user_profiles
+   set role = 'admin'
+ where user_id = (select id from auth.users where email = 'YOUR_EMAIL_HERE');
+```
+
+```sql
+-- Option B: Wipe the stuck account and re-signup via /admin/sign-up
+-- with the new single-call flow.
+delete from auth.users where email = 'YOUR_EMAIL_HERE';
+-- Then visit /admin/sign-up again.
+```
+
+To list current admins:
+
+```sql
+select up.user_id, u.email, up.role
+  from public.user_profiles up
+  join auth.users u on u.id = up.user_id
+ where up.role = 'admin';
+```
+
+To demote an admin:
+
+```sql
+update public.user_profiles set role = 'user' where user_id = '<uuid>';
+```
+
+### Email delivery (Supabase free-tier email is unreliable)
+
+Supabase's built-in email is rate-limited and frequently delays
+delivery. The admin-signup flow above sidesteps this by creating users
+with `email_confirm=true`, but **password resets** and **regular user
+signups** still depend on email working. Two paths:
+
+1. **Quickest** — Supabase Dashboard → Authentication → Providers →
+   Email → toggle **"Confirm email" OFF**. Now regular signups don't
+   need email confirmation either. Reduces friction; loses the
+   email-ownership check.
+
+2. **Production-grade** — Configure custom SMTP using a real provider
+   (Resend, Postmark, SendGrid). Free tiers exist:
+   - **Resend** (recommended) — 3,000 emails/month free, simplest setup.
+     Add domain `terrawatchapp.com` → verify the SPF/DKIM records they
+     give you in Cloudflare DNS → grab API key.
+   - Supabase Dashboard → **Authentication → Emails → SMTP Settings**:
+     - Host: `smtp.resend.com`, Port: `465`, Username: `resend`,
+       Password: `<resend-api-key>`,
+     - Sender email: `info@terrawatchapp.com` (or `hello@`, `support@`,
+       `noreply@`),
+     - Sender name: `TerraWatch`.
+   - Save → send a test email to confirm.
+
+Once SMTP is configured, the regular sign-in flow's magic links and
+password resets will deliver reliably from your domain.
+
+To receive replies on those addresses, add Cloudflare Email Routing
+(free): CF Dashboard → terrawatchapp.com → Email → Email Routing → add
+forwarding rules `info@terrawatchapp.com → your-personal-gmail@…` etc.
+
+### Per-post OG meta for social previews (Phase 9.8.1)
+
+A small Cloudflare Worker at `worker/index.js` intercepts `/blog/:slug`
+requests, fetches the post from Supabase via PostgREST (anon key, RLS
+scoped to `published=true`), and rewrites the SPA shell's `<title>`,
+`og:*`, `twitter:*`, and `article:*` meta tags before responding. This
+makes per-post link previews work on **non-JS crawlers** (LinkedIn,
+Reddit, Facebook, WhatsApp) as well as the JS-aware ones already
+covered by the client-side `useMeta` composable.
+
+**One-time Worker env-var setup** (Cloudflare dashboard → Worker
+`terrawatchapp-beta` → **Settings → Variables and Secrets**, both as
+plaintext — they're public-by-design):
+
+| Variable | Value |
+| --- | --- |
+| `SUPABASE_URL` | Same as `VITE_SUPABASE_URL` (e.g. `https://xxx.supabase.co`) |
+| `SUPABASE_ANON_KEY` | Same as `VITE_SUPABASE_ANON_KEY` |
+
+After adding the vars, push any commit (or click "Retry deployment")
+to rebuild the Worker against the new env. Verify with:
 
 ```bash
-supabase secrets set ASK_TERRA_DAILY_LIMIT=10
+curl -s https://hyperlocalwatch.com/blog/why-we-built-terrawatch | grep -E 'og:title|og:image|twitter:title'
 ```
+
+…you should see per-post `og:title`, `og:description`, `og:url`, and
+(if the post has a `hero_image`) `og:image` tags — not the index.html
+defaults.
+
+**Validating in the platforms themselves**:
+- **LinkedIn** — paste the URL into <https://www.linkedin.com/post-inspector/>
+  and click "Inspect". They cache aggressively; re-inspect after edits.
+- **Twitter / X** — <https://cards-dev.twitter.com/validator>.
+- **Facebook / WhatsApp** — <https://developers.facebook.com/tools/debug/>;
+  WhatsApp uses Facebook's scraper.
+- **Discord / Slack** — paste the URL into a channel; they re-fetch
+  every ~30 minutes.
+
+The Worker has a 5-minute CDN cache. Edits to a published post
+propagate within that window; the social platforms have their own
+caches on top (LinkedIn especially — use post-inspector to refresh).
+
+**For posts to actually show an image** in previews, set the post's
+**Hero image URL** field in `/admin/blog/:id`. Use either an absolute
+HTTPS URL (e.g. CDN-hosted) or a path served from `/public/` (e.g.
+`/images/blog/<slug>.jpg`). LinkedIn requires the image be at least
+1200×627 for the wide-card variant.
 
 ### Auto-deploying migrations + edge functions
 
@@ -118,8 +327,21 @@ GitHub Secrets (Repo → **Settings → Secrets and variables → Actions → Se
 | `SUPABASE_PROJECT_REF` | The 20-character project ref in your project URL (`https://<ref>.supabase.co`) |
 | `SUPABASE_DB_PASSWORD` | Supabase → **Project Settings → Database → Connection string → Password** (the one you set at project creation; reset it there if you don't remember) |
 | `INGEST_SECRET` | Any long random string — paste the same value into `supabase secrets set INGEST_SECRET=...` (see Events ingest section below). |
+| `SUPABASE_URL_PUBLIC` (optional) | Same value as `VITE_SUPABASE_URL`. Powers the nightly health-check workflow's PostgREST queries. Without it the workflow runs only the page-reachability + OG-injector checks. |
+| `SUPABASE_ANON_KEY_PUBLIC` (optional) | Same value as `VITE_SUPABASE_ANON_KEY`. Pairs with the secret above. |
 
 Once set, every push to `main` or `claude/terrawatch-redesign-dMM0l` that touches those paths auto-applies the migration **and** redeploys both functions.
+
+### Nightly health-check workflow (Phase 9.10 Tier B)
+
+`.github/workflows/nightly-health-check.yml` runs at 07:00 UTC daily and can be triggered manually from the Actions tab. It:
+
+1. Pings `/`, `/events`, `/alerts`, `/blog`, `/monitoring/ocean`, and the three `/research/*` views; flags any non-200.
+2. Verifies the OG worker injected per-post `og:title` for `/blog/why-we-built-terrawatch`.
+3. Calls the public `research_counters` RPC and `events_recent` RPC to confirm Supabase + ingesters are alive.
+4. Posts a Markdown report into the workflow run's **Step Summary** so you can read the result without leaving GitHub.
+
+To enable the optional Supabase data-freshness checks, add `SUPABASE_URL_PUBLIC` + `SUPABASE_ANON_KEY_PUBLIC` to GitHub Secrets (same values as the `VITE_*` env vars — both are public-by-design). Without them the workflow still does the curl checks; it just skips the data-freshness lines.
 
 ## Events ingest pipeline (Phase 8)
 
@@ -161,8 +383,122 @@ select vault.create_secret('https://<ref>.supabase.co/functions/v1/ingest-space'
 select vault.create_secret('https://<ref>.supabase.co/functions/v1/ingest-wildfires', 'ingest_wildfires_url');
 select vault.create_secret('https://<ref>.supabase.co/functions/v1/ingest-volcanoes', 'ingest_volcanoes_url');
 -- Phase 9.2.1 — global multi-hazard (volcanoes/cyclones/floods/tsunamis/wildfires).
-select vault.create_secret('https://<ref>.supabase.co/functions/v1/ingest-gdacs',     'ingest_gdacs_url');
+select vault.create_secret('https://<ref>.supabase.co/functions/v1/ingest-gdacs',       'ingest_gdacs_url');
+-- Phase 9.2.2 — Smithsonian Global Volcanism Program weekly report.
+select vault.create_secret('https://<ref>.supabase.co/functions/v1/ingest-smithsonian', 'ingest_smithsonian_url');
+-- Phase 9.2.3a — NOAA National Hurricane Center (Atlantic + E. Pacific).
+select vault.create_secret('https://<ref>.supabase.co/functions/v1/ingest-nhc',         'ingest_nhc_url');
+-- Phase 9.2.4 — OpenAQ global air quality (PM2.5 readings ≥55 µg/m³).
+select vault.create_secret('https://<ref>.supabase.co/functions/v1/ingest-openaq',      'ingest_openaq_url');
+-- Phase 9.6 — NOAA NDBC ocean buoys (time-series → measurements table).
+select vault.create_secret('https://<ref>.supabase.co/functions/v1/ingest-ndbc',        'ingest_ndbc_url');
 ```
+
+**OpenAQ v3 requires an API key** — recent breaking change in Q1 2026; the
+ingester returns 401 silently without one, leaving `air_quality` empty in
+the events feed. Register free at https://explore.openaq.org/register and
+set as an edge-function secret (not Vault):
+
+```bash
+supabase secrets set OPENAQ_API_KEY=<your-key>
+```
+
+After rotating, redeploy the function so it picks up the new env:
+
+```bash
+supabase functions deploy ingest-openaq --no-verify-jwt=true
+```
+
+### Diagnosing missing data
+
+If a source isn't producing rows, run these in order — one of them always
+points at the actual problem:
+
+```sql
+-- A. Did all Vault URL secrets get inserted?
+select name from vault.decrypted_secrets
+where name like 'ingest_%_url'
+order by name;
+-- Expect rows for every ingester you've shipped. Missing = run vault.create_secret(...).
+
+-- B. Are crons firing successfully?
+select jobname, status, return_message, start_time
+from cron.job_run_details
+order by start_time desc limit 30;
+-- 'failed' rows tell you what's wrong (missing vault secret, function error, etc).
+
+-- C. Per-source row counts (last 24h)
+select source, count(*), max(occurred_at) as latest
+from public.events
+where occurred_at >= now() - interval '24 hours'
+group by source order by 2 desc;
+
+-- D. Per-category row counts (drives the dropdown's auto-grey UX from 9.5)
+select * from public.events_category_counts(30);
+-- Categories with 0 rows render greyed in the UI.
+```
+
+For source-specific failures, also check Edge Function logs:
+**Supabase Dashboard → Edge Functions → <name> → Logs**. Look for
+`HTTP 401` (auth), `HTTP 5xx` (upstream down), or `[ingest:<name>]`
+prefixed warnings (parser issues).
+
+**Air-quality (`openaq.pm25`) showing zero rows? Most-likely causes:**
+
+```sql
+-- 1. Is the URL secret present?
+select name from vault.decrypted_secrets where name = 'ingest_openaq_url';
+-- If empty: select vault.create_secret('https://<ref>.supabase.co/functions/v1/ingest-openaq', 'ingest_openaq_url');
+
+-- 2. Did the cron actually run, and what did it return?
+select status, return_message, start_time
+from cron.job_run_details
+where jobname = 'ingest-openaq-hourly'
+order by start_time desc limit 5;
+-- 'HTTP 401' from openaq → API key required. See below.
+-- 'HTTP 5xx' → OpenAQ API is having issues; retry later.
+
+-- 3. Did rows land but get filtered out?
+-- The ingester only stores readings ≥55 µg/m³ PM2.5 (US EPA 'Unhealthy').
+-- Most regions are below that on a clean-air day. Confirm by relaxing
+-- the filter temporarily in supabase/functions/ingest-openaq/index.ts.
+```
+
+**OpenAQ API key requirement (likely root cause):** OpenAQ's v3 API
+now requires a free API key for the `/parameters/2/latest` endpoint
+the ingester uses. Get one at <https://api.openaq.org/register>, then:
+
+```bash
+supabase secrets set OPENAQ_API_KEY=<your-key>
+```
+
+Then re-deploy the ingester (push any commit that touches
+`supabase/functions/ingest-openaq/**`) and watch the next cron run
+succeed.
+
+**"Why is tornado / hurricane / heat / flood / thunderstorm empty?"**
+
+These categories *are* supported via existing ingesters — they just
+fire only during real activity:
+
+| Category | Source | When it fires |
+| --- | --- | --- |
+| `tornado` | NWS alerts | Active US tornado warnings |
+| `hurricane` | NHC + GDACS + NWS | Active Atlantic / E. Pacific cyclones |
+| `heat` | NWS alerts | US heat advisories (June–Sept usually) |
+| `flood` | NWS alerts + GDACS | Active flood/flash-flood warnings |
+| `storm` | NWS alerts (incl. severe thunderstorm warnings) | US severe convective storms |
+| `winter_storm` | NWS alerts | US winter storm warnings (Nov–Mar) |
+| `wildfire` | NASA EONET | Active fires globally |
+| `earthquake` | USGS + GDACS | Always (ambient seismicity) |
+| `volcano` | USGS HANS + Smithsonian GVP + GDACS | Always (continuous unrest reports) |
+| `geomagnetic_storm` | NOAA SWPC | Always (Kp index sample every hour) |
+| `air_quality` | OpenAQ | Stations with PM2.5 ≥55 µg/m³ |
+
+Run query D above (`events_category_counts(30)`) to see which
+categories have rows in the last 30 days. Empty buckets in season
+suggest a quiet period; empty buckets across multiple seasons suggest
+the upstream source is failing — check the cron run history.
 
 `vault.create_secret` is idempotent on name conflict (it errors); re-running is safe — just skip rows you already have. The legacy `ingest_events_url` row from the monolith era can be deleted at your leisure (harmless if left).
 
@@ -170,13 +506,19 @@ Verify the schedules are active:
 
 ```sql
 select jobname, schedule, active from cron.job order by jobname;
--- expected: six active rows
---   ingest-seismic-hourly    '0 * * * *'
---   ingest-weather-hourly    '2 * * * *'
---   ingest-space-hourly      '4 * * * *'
---   ingest-wildfires-hourly  '6 * * * *'
---   ingest-volcanoes-hourly  '8 * * * *'
---   ingest-gdacs-hourly      '10 * * * *'
+-- expected: 12 active rows (10 ingesters + 2 monitoring jobs)
+--   ingest-seismic-hourly       '0 * * * *'
+--   ingest-weather-hourly       '2 * * * *'
+--   ingest-space-hourly         '4 * * * *'
+--   ingest-wildfires-hourly     '6 * * * *'
+--   ingest-volcanoes-hourly     '8 * * * *'
+--   ingest-gdacs-hourly         '10 * * * *'
+--   ingest-smithsonian-hourly   '12 * * * *'
+--   ingest-nhc-hourly           '14 * * * *'
+--   ingest-openaq-hourly        '16 * * * *'
+--   ingest-ndbc-hourly          '18 * * * *'
+--   measurements-hourly-refresh '*/30 * * * *'   (Phase 9.6)
+--   measurements-prune-nightly  '17 3 * * *'     (Phase 9.6)
 ```
 
 Inspect recent runs (per source):
@@ -222,6 +564,70 @@ Expected response per function: `{ ok: true, source: 'seismic', durationMs: ...,
 ### Client behavior
 
 `src/composables/useEvents.ts` reads via the `events_near` RPC when `VITE_SUPABASE_URL` / `VITE_SUPABASE_ANON_KEY` are set, and transparently falls back to the legacy live-API path (USGS / Open-Meteo / SWPC direct) if the RPC errors or Supabase is unconfigured. The UI never goes blank mid-ingest.
+
+## Insurance MVP — FEMA NRI seeding (Phase 9.12)
+
+The `/insurance` dashboard reads from `public.fema_nri`, a static county-level table seeded from the FEMA National Risk Index. Migrations `0025_fema_nri.sql` and `0026_insurance_rpcs.sql` create the table + five public RPCs. The seed itself is a one-time manual step per FEMA release — re-run yearly when FEMA publishes a new version (typically Q4).
+
+### One-time CSV preparation per release
+
+FEMA distributes the National Risk Index as a ZIP wrapping a CSV. The Deno standard library doesn't ship a ZIP reader, so the `seed-fema-nri` edge function takes a **plain CSV URL**, not the FEMA `.zip`. Operator workflow:
+
+1. Visit https://hazards.fema.gov/nri/data-resources and download the **Counties — CSV** archive (`NRI_Table_Counties.zip`, ~30MB).
+2. Unzip locally — you'll get `NRI_Table_Counties.csv` (~80MB).
+3. Upload the CSV to a publicly-readable URL. Easiest path:
+   - Supabase dashboard → **Storage** → create a bucket called `fema` if it doesn't exist (Public bucket: yes).
+   - Upload `NRI_Table_Counties.csv` to the bucket.
+   - Copy the public URL (right-click the row → **Get URL**).
+
+### Run the seed
+
+Two interchangeable paths:
+
+**a) GitHub Actions (recommended)** — Actions tab → **Seed FEMA NRI** → Run workflow → paste the CSV URL → Run. The workflow POSTs to the edge function with `INGEST_SECRET` and prints the result.
+
+**b) Direct curl** — for ad-hoc reseeding from your machine:
+
+```bash
+curl -sS -X POST \
+  "https://<project-ref>.supabase.co/functions/v1/seed-fema-nri" \
+  -H "x-ingest-secret: $INGEST_SECRET" \
+  -H "content-type: application/json" \
+  --max-time 600 \
+  --data '{ "csv_url": "<public CSV URL>", "dry_run": false }' | jq
+```
+
+Set `dry_run: true` first to validate the CSV parses correctly (returns row counts + a sample row without inserting). Then re-run with `dry_run: false`.
+
+Expected response on success: `{ ok: true, fetched: ~3200, parsed: ~3200, upserted: ~3200, sample: { ... }, error: null }`. The function upserts on `county_fips` so re-running is idempotent.
+
+### Verification
+
+```sql
+-- Should be ~3,200
+select count(*) from public.fema_nri;
+
+-- Sample row
+select * from public.fema_nri where county_fips = '06037';  -- LA County
+
+-- Sanity-check the RPCs that drive the dashboard
+select * from public.insurance_counters();
+select * from public.insurance_top_counties_by_hazard('flood', 10);
+select * from public.insurance_top_counties_by_hazard('wildfire', 10);
+select * from public.insurance_top_counties_by_hazard('hurricane', 10);
+select * from public.insurance_state_eal(20);
+select count(*) from public.insurance_active_threats_in_high_risk(80, 50);
+```
+
+After the seed lands, visit `https://hyperlocalwatch.com/insurance` — hero counters should show ~3,200 counties indexed and a multi-trillion-dollar total EAL. The state EAL bar chart populates immediately; the County Detail panel auto-loads the highest-EAL county.
+
+### Troubleshooting
+
+- **`csv_url not provided`** — pass it in the request body or set the `FEMA_NRI_CSV_URL` env var on the function (`supabase secrets set FEMA_NRI_CSV_URL=...`).
+- **`CSV parsed to 0 valid rows — column-name mismatch?`** — FEMA changed their column headers between releases. The function maps `STCOFIPS` / `COUNTYFIPS` / `GEOID` for the FIPS column, `STATE`, `COUNTY`, plus `<HAZ>_EALT` per hazard. If FEMA renames anything, update `rowFromCsv()` in `supabase/functions/seed-fema-nri/index.ts`.
+- **`502` with timeout error** — the CSV is too large or the upstream URL is slow. Try a smaller test CSV first (`dry_run: true` to confirm parsing) or move the CSV closer (Supabase Storage in the same region).
+- **Hero counters all show 0** — the seed inserted into `fema_nri` but the RPCs aren't returning. Check `select count(*) from public.fema_nri;` directly. If non-zero but the RPCs return empty, the migration didn't grant `execute` to anon — re-apply `0026_insurance_rpcs.sql`.
+- **Active-threat counter stays at 0** — expected if the events table doesn't have any caution/danger severity events from the last 24h that match a high-risk state. Trigger a fresh ingest run or wait for the next hourly cron tick.
 
 ## Troubleshooting
 

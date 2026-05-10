@@ -7,6 +7,7 @@ const sidebar = useSidebar()
 
 const items = [
   { to: '/',       label: 'Home',   icon: 'home'  },
+  { to: '/alerts', label: 'Alerts', icon: 'bell'  },
   { to: '/events', label: 'Events', icon: 'globe' },
   { to: '/travel', label: 'Travel', icon: 'nav'   },
 ] as const
@@ -24,7 +25,7 @@ function isActive(to: string): boolean {
     role="navigation"
     aria-label="Primary"
   >
-    <ul class="grid grid-cols-4 max-w-xl mx-auto">
+    <ul class="grid grid-cols-5 max-w-xl mx-auto">
       <li v-for="item in items" :key="item.to" class="text-center">
         <RouterLink
           :to="item.to"
@@ -43,6 +44,10 @@ function isActive(to: string): boolean {
               </template>
               <template v-else-if="item.icon === 'nav'">
                 <polygon points="3,11 22,2 13,21 11,13 3,11"/>
+              </template>
+              <template v-else-if="item.icon === 'bell'">
+                <path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/>
+                <path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/>
               </template>
             </svg>
           </span>

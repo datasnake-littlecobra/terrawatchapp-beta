@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { ref, computed, onMounted } from 'vue'
+import { fetchCategoryCounts, canUseEventsDb } from '@/services/events'
 
 export interface FiltersState {
   search:     string
@@ -12,6 +13,30 @@ const emit  = defineEmits<{ 'update:modelValue': [FiltersState] }>()
 
 function update(patch: Partial<FiltersState>) {
   emit('update:modelValue', { ...props.modelValue, ...patch })
+}
+
+// Phase 9.5: rolling 30-day row count per category. Drives the dropdown's
+// auto-grey UX — empty categories render disabled with the live count next
+// to their label so users see why something's missing.
+const counts = ref<Record<string, number>>({})
+
+async function loadCounts() {
+  if (!canUseEventsDb()) return
+  try {
+    const list = await fetchCategoryCounts(30)
+    counts.value = Object.fromEntries(list.map((r) => [r.category, r.rows]))
+  } catch {
+    // best-effort — if counts fail, all categories stay enabled (no regression)
+  }
+}
+
+onMounted(loadCounts)
+
+function countFor(id: string): number {
+  return counts.value[id] ?? 0
+}
+function isEmpty(id: string): boolean {
+  return Object.keys(counts.value).length > 0 && countFor(id) === 0
 }
 
 // Grouped to match what the ingest pipeline actually emits today
@@ -84,6 +109,7 @@ const severityOptions = [
 const catOpen = ref(false)
 
 function toggleCategory(id: string) {
+  if (isEmpty(id)) return
   const cur = props.modelValue.categories
   const next = cur.includes(id) ? cur.filter((c) => c !== id) : [...cur, id]
   update({ categories: next })
@@ -149,15 +175,25 @@ function clearAll() {
             <label
               v-for="opt in group.items"
               :key="opt.id"
-              class="flex items-center gap-2.5 px-2 py-1.5 rounded-lg cursor-pointer hover:bg-white/5 text-sm text-ink-primary"
+              class="flex items-center gap-2.5 px-2 py-1.5 rounded-lg text-sm transition-colors"
+              :class="isEmpty(opt.id)
+                ? 'text-ink-muted/40 cursor-not-allowed'
+                : 'text-ink-primary cursor-pointer hover:bg-white/5'"
+              :title="isEmpty(opt.id) ? 'No data in the last 30 days' : undefined"
             >
               <input
                 type="checkbox"
-                class="accent-accent"
+                class="accent-accent disabled:opacity-40"
                 :checked="modelValue.categories.includes(opt.id)"
+                :disabled="isEmpty(opt.id)"
                 @change="toggleCategory(opt.id)"
               />
-              {{ opt.label }}
+              <span class="flex-1">{{ opt.label }}</span>
+              <span
+                v-if="Object.keys(counts).length > 0"
+                class="num text-[10px] tabular-nums"
+                :class="isEmpty(opt.id) ? 'text-ink-muted/40' : 'text-ink-muted/70'"
+              >{{ countFor(opt.id) }}</span>
             </label>
           </div>
         </div>

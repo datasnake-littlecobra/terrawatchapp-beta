@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { computed } from 'vue'
 import { RouterLink, useRoute } from 'vue-router'
 import { useSidebar } from '@/composables/useSidebar'
 import { useAuthStore } from '@/stores/auth'
@@ -11,33 +12,77 @@ function isActive(path: string) {
   return route.path === path || route.path.startsWith(path + '/')
 }
 
-const sections = [
-  {
-    label: 'Monitoring',
-    items: [
-      { to: '/events',     icon: 'globe',    label: 'Global Events' },
-      { to: '/events/map', icon: 'map-pin',  label: 'Events Map' },
-      { to: '/ocean',      icon: 'waves',    label: 'Ocean Monitoring', soon: true },
-    ],
-  },
-  {
-    label: 'Intelligence',
-    items: [
-      { to: '/submarines', icon: 'anchor', label: 'Submarines',   soon: true },
-      { to: '/ufo',        icon: 'eye',    label: 'UFO Sightings', soon: true },
-    ],
-  },
-  {
-    label: 'Tools',
-    items: [
-      { to: '/travel',    icon: 'navigation',     label: 'Travel Advisory' },
-      { to: '/bookmarks', icon: 'bookmark',       label: 'Bookmarks' },
-      { to: '/discover',  icon: 'compass',        label: 'Discover', soon: true },
-      { to: '/about',     icon: 'heart',          label: 'Support DataSnake' },
-      { to: '/settings',  icon: 'settings',       label: 'Settings' },
-    ],
-  },
-]
+interface NavItem {
+  to:    string
+  icon:  string
+  label: string
+  soon?: boolean
+}
+interface NavSection {
+  label: string
+  items: NavItem[]
+}
+
+// Phase 9.8: Admin section appears in the sidebar only when the signed-in
+// user has role='admin' (driven by auth.isAdmin which reads from
+// public.user_profiles via the auth store).
+const sections = computed<NavSection[]>(() => {
+  const base: NavSection[] = [
+    {
+      label: 'Monitoring',
+      items: [
+        { to: '/alerts',     icon: 'bell',     label: 'Alerts' },
+        { to: '/events',     icon: 'globe',    label: 'Global Events' },
+        { to: '/events/map', icon: 'map-pin',  label: 'Events Map' },
+        { to: '/ocean',      icon: 'waves',    label: 'Ocean Monitoring' },
+      ],
+    },
+    {
+      label: 'Intelligence',
+      items: [
+        { to: '/submarines', icon: 'anchor', label: 'Submarines',   soon: true },
+        { to: '/ufo',        icon: 'eye',    label: 'UFO Sightings', soon: true },
+      ],
+    },
+    {
+      label: 'Research',
+      items: [
+        { to: '/research/atmosphere',     icon: 'sparkle', label: 'Atmosphere' },
+        { to: '/research/ocean',          icon: 'waves',   label: 'Ocean' },
+        { to: '/research/seismic-hazard', icon: 'pen',     label: 'Seismic hazard' },
+      ],
+    },
+    {
+      label: 'Verticals',
+      items: [
+        { to: '/insurance', icon: 'shield', label: 'Insurance' },
+      ],
+    },
+    {
+      label: 'Tools',
+      items: [
+        { to: '/ask',       icon: 'message',        label: 'Ask Terra' },
+        { to: '/travel',    icon: 'navigation',     label: 'Travel Advisory' },
+        { to: '/bookmarks', icon: 'bookmark',       label: 'Bookmarks' },
+        { to: '/discover',  icon: 'compass',        label: 'Discover', soon: true },
+        { to: '/blog',      icon: 'pen',            label: 'Blog' },
+        { to: '/about',     icon: 'heart',          label: 'Support DataSnake' },
+        { to: '/settings',  icon: 'settings',       label: 'Settings' },
+      ],
+    },
+  ]
+  if (auth.isAdmin) {
+    base.push({
+      label: 'Admin',
+      items: [
+        { to: '/admin/blog',     icon: 'pen',      label: 'Blog dashboard' },
+        { to: '/admin/blog/new', icon: 'sparkle',  label: 'Generate post' },
+        { to: '/admin/health',   icon: 'bell',     label: 'Ingest health' },
+      ],
+    })
+  }
+  return base
+})
 </script>
 
 <template>
@@ -98,6 +143,10 @@ const sections = [
                 <template v-if="item.icon === 'globe'">
                   <circle cx="12" cy="12" r="9"/><path d="M2 12h20M12 2a15 15 0 0 1 0 20M12 2a15 15 0 0 0 0 20"/>
                 </template>
+                <template v-else-if="item.icon === 'bell'">
+                  <path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/>
+                  <path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/>
+                </template>
                 <template v-else-if="item.icon === 'map-pin'">
                   <path d="M20 10c0 6-8 12-8 12S4 16 4 10a8 8 0 1 1 16 0Z"/><circle cx="12" cy="10" r="2.5"/>
                 </template>
@@ -118,6 +167,19 @@ const sections = [
                 </template>
                 <template v-else-if="item.icon === 'compass'">
                   <circle cx="12" cy="12" r="9"/><path d="m15 9-4 2-2 4 4-2 2-4Z"/>
+                </template>
+                <template v-else-if="item.icon === 'pen'">
+                  <path d="M12 19h9"/><path d="M16.5 3.5a2.121 2.121 0 1 1 3 3L7 19l-4 1 1-4Z"/>
+                </template>
+                <template v-else-if="item.icon === 'sparkle'">
+                  <path d="M12 3v3M12 18v3M3 12h3M18 12h3M5.6 5.6l2.1 2.1M16.3 16.3l2.1 2.1M5.6 18.4l2.1-2.1M16.3 7.7l2.1-2.1"/>
+                </template>
+                <template v-else-if="item.icon === 'message'">
+                  <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
+                </template>
+                <template v-else-if="item.icon === 'shield'">
+                  <path d="M12 3 4 6v6c0 5 4 8 8 9 4-1 8-4 8-9V6Z"/>
+                  <path d="M9.5 11h4a1.5 1.5 0 0 1 0 3h-3a1.5 1.5 0 0 0 0 3h4"/>
                 </template>
                 <template v-else-if="item.icon === 'heart'">
                   <path d="M20.8 4.6a5.5 5.5 0 0 0-7.8 0L12 5.7l-1-1.1a5.5 5.5 0 0 0-7.8 7.8l1 1L12 21l7.8-7.6 1-1a5.5 5.5 0 0 0 0-7.8Z"/>

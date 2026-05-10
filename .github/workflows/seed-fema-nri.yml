@@ -1,0 +1,76 @@
+name: Seed FEMA NRI
+
+# Phase 9.12 — one-shot bulk loader for the FEMA National Risk Index
+# county-level dataset. Run this once after the 0025/0026 migrations apply,
+# then re-run yearly when FEMA publishes a new release (typically Q4).
+# Idempotent on county_fips — re-running with a fresh CSV is safe.
+#
+# How to run:
+#   Actions tab → "Seed FEMA NRI" → Run workflow → paste the CSV URL.
+#
+# CSV preparation (one-time per release):
+#   1. Download from https://hazards.fema.gov/nri/data-resources (the
+#      "Counties — CSV" link).
+#   2. Unzip locally.
+#   3. Upload the unzipped CSV to a publicly-readable location — easiest
+#      is a Supabase Storage bucket with the "public" policy. Paste the
+#      direct URL into this workflow's input.
+#
+# Why no auto-fetch from FEMA's URL: their download is a ZIP container,
+# and Deno's std doesn't ship a ZIP reader. The seed function intentionally
+# takes a plain CSV URL — operator unpacks the zip themselves.
+
+on:
+  workflow_dispatch:
+    inputs:
+      csv_url:
+        description: 'Public URL to the FEMA NRI counties CSV (must be unzipped)'
+        required: true
+        type: string
+      dry_run:
+        description: 'Parse and report row counts without inserting'
+        required: false
+        type: boolean
+        default: false
+
+concurrency:
+  group: seed-fema-nri
+  cancel-in-progress: false
+
+jobs:
+  seed:
+    name: Trigger seed-fema-nri edge function
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      SUPABASE_PROJECT_REF: ${{ secrets.SUPABASE_PROJECT_REF }}
+      INGEST_SECRET:        ${{ secrets.INGEST_SECRET }}
+      CSV_URL:              ${{ inputs.csv_url }}
+      DRY_RUN:              ${{ inputs.dry_run }}
+    steps:
+      - name: Validate secrets and inputs
+        run: |
+          if [ -z "$SUPABASE_PROJECT_REF" ] || [ -z "$INGEST_SECRET" ]; then
+            echo "Missing SUPABASE_PROJECT_REF or INGEST_SECRET secret" >&2
+            exit 1
+          fi
+          if [ -z "$CSV_URL" ]; then
+            echo "csv_url input is required" >&2
+            exit 1
+          fi
+
+      - name: POST to seed-fema-nri
+        run: |
+          URL="https://${SUPABASE_PROJECT_REF}.supabase.co/functions/v1/seed-fema-nri"
+          echo "POST ${URL}"
+          BODY=$(jq -n --arg url "$CSV_URL" --argjson dry "${DRY_RUN:-false}" '{ csv_url: $url, dry_run: $dry }')
+          HTTP_STATUS=$(curl -sS -o /tmp/out.json -w '%{http_code}' \
+            -X POST "$URL" \
+            -H "x-ingest-secret: ${INGEST_SECRET}" \
+            -H "content-type: application/json" \
+            --max-time 600 \
+            --data "$BODY")
+          echo "HTTP $HTTP_STATUS"
+          cat /tmp/out.json
+          echo
+          [ "$HTTP_STATUS" -lt 300 ] || exit 1

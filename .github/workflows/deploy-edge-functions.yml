@@ -42,6 +42,21 @@ jobs:
       - name: Deploy ask-terra
         run: supabase functions deploy ask-terra --no-verify-jwt=false
 
+      - name: Deploy ask-terra-chat
+        run: supabase functions deploy ask-terra-chat --no-verify-jwt=false
+
+      # Phase 9.9 — admin-only AI blog generator. JWT-gated; the function
+      # itself also checks user_profiles.role='admin' before calling
+      # Anthropic, so a non-admin JWT will get a 403.
+      - name: Deploy generate-blog
+        run: supabase functions deploy generate-blog --no-verify-jwt=false
+
+      # Phase 9.8 follow-up — single-call admin signup. Anonymous endpoint
+      # (the admin signup code is the gating factor); skips Supabase's
+      # email-confirmation friction by creating users with email_confirm=true.
+      - name: Deploy signup-admin
+        run: supabase functions deploy signup-admin --no-verify-jwt=true
+
       # Phase 9.0.1 — per-source ingest functions. Each is invoked by pg_cron
       # via the shared `x-ingest-secret` header (no Supabase JWT).
       - name: Deploy ingest-seismic
@@ -61,3 +76,21 @@ jobs:
 
       - name: Deploy ingest-gdacs
         run: supabase functions deploy ingest-gdacs --no-verify-jwt=true
+
+      - name: Deploy ingest-smithsonian
+        run: supabase functions deploy ingest-smithsonian --no-verify-jwt=true
+
+      - name: Deploy ingest-nhc
+        run: supabase functions deploy ingest-nhc --no-verify-jwt=true
+
+      - name: Deploy ingest-openaq
+        run: supabase functions deploy ingest-openaq --no-verify-jwt=true
+
+      - name: Deploy ingest-ndbc
+        run: supabase functions deploy ingest-ndbc --no-verify-jwt=true
+
+      # Phase 9.12 — one-shot FEMA NRI bulk loader. Triggered manually via
+      # the seed-fema-nri workflow (workflow_dispatch). Same INGEST_SECRET
+      # gate as the other ingesters; no Supabase JWT required.
+      - name: Deploy seed-fema-nri
+        run: supabase functions deploy seed-fema-nri --no-verify-jwt=true

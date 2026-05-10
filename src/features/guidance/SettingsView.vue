@@ -81,5 +81,25 @@ function pick(p: Place) {
         >Imperial</button>
       </div>
     </Card>
+
+    <Card padded>
+      <label class="flex items-center justify-between gap-3">
+        <div>
+          <h2 class="font-medium">Push notifications</h2>
+          <p class="text-ink-muted text-sm mt-1">
+            Severe weather, M4+ quakes within 100 km, Kp ≥ 6.
+          </p>
+        </div>
+        <input
+          type="checkbox"
+          :checked="prefs.pushEnabled"
+          class="w-5 h-5 accent-accent shrink-0"
+          @change="(e) => prefs.patch({ pushEnabled: (e.target as HTMLInputElement).checked })"
+        />
+      </label>
+      <p class="text-ink-dim text-xs mt-3">
+        Push delivery is wired in a later phase. Your preference is saved locally.
+      </p>
+    </Card>
   </div>
 </template>
