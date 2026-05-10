@@ -78,12 +78,15 @@ declare
   classified text;
 begin
   for pair in select * from public.health_source_jobs() loop
-    -- Latest cron run for this job
-    select status, start_time
+    -- Latest cron run for this job. Join through cron.job because some
+    -- pg_cron versions don't expose `jobname` on cron.job_run_details
+    -- — only `jobid`. The cron.job table always has both.
+    select d.status, d.start_time
       into last_status, last_run
-      from cron.job_run_details
-     where jobname = pair.job
-     order by start_time desc
+      from cron.job_run_details d
+      join cron.job j on j.jobid = d.jobid
+     where j.jobname = pair.job
+     order by d.start_time desc
      limit 1;
 
     -- Volume in last 24h. NDBC measurements live in a different table.
