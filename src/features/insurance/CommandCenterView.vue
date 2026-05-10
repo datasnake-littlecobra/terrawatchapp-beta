@@ -111,17 +111,35 @@ function renderMarkers() {
       border: 2px solid ${color};
       box-shadow: 0 0 0 4px ${color}1a;
       cursor: pointer;
-      transition: transform 200ms ease;
     `
-    el.addEventListener('mouseenter', () => { el.style.transform = 'scale(1.2)' })
-    el.addEventListener('mouseleave', () => { el.style.transform = 'scale(1)' })
-    el.addEventListener('click', () => {
-      router.push({ path: '/insurance/verdict', query: { q: c.city } })
-    })
+    const popup = buildPopup(c)
     const marker = new maplibregl.Marker({ element: el })
       .setLngLat([c.lon, c.lat])
-      .setPopup(buildPopup(c))
+      .setPopup(popup)
       .addTo(m)
+
+    // Show popup on hover (no scale transform — that was making the
+    // marker visibly shift, which read as "moving away"). Click drills
+    // through to the address-level Risk Verdict.
+    let isOpen = false
+    el.addEventListener('mouseenter', () => {
+      if (!isOpen) {
+        popup.addTo(m)
+        isOpen = true
+      }
+      el.style.boxShadow = `0 0 0 6px ${color}33`
+    })
+    el.addEventListener('mouseleave', () => {
+      if (isOpen) {
+        popup.remove()
+        isOpen = false
+      }
+      el.style.boxShadow = `0 0 0 4px ${color}1a`
+    })
+    el.addEventListener('click', (ev) => {
+      ev.stopPropagation()
+      router.push({ path: '/insurance/verdict', query: { q: c.city } })
+    })
     next.push(marker)
   }
   markers.value = next
@@ -259,7 +277,14 @@ watch(layer, () => renderMarkers())
         </Card>
       </div>
 
-      <p class="text-ink-muted/60 text-xs mt-5 max-w-3xl">
+      <p class="text-ink-muted/60 text-xs mt-3 max-w-3xl">
+        <strong class="text-ink-muted">Tip:</strong>
+        Hover any marker to read its risk score, dominant peril, and
+        modeled exposure. Click to drop into the address-level Risk
+        Verdict pre-loaded for that market.
+      </p>
+
+      <p class="text-ink-muted/60 text-xs mt-3 max-w-3xl">
         <strong class="text-ink-muted">How to read this:</strong>
         Marker size reflects modeled $ exposure; color reflects
         composite risk score. Trend arrows in the sidebar are computed
