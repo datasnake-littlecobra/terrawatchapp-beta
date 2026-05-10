@@ -25,6 +25,7 @@ import GapCallout       from '@/features/research/GapCallout.vue'
 import HazardTopList    from './HazardTopList.vue'
 import CountyDetailPanel from './CountyDetailPanel.vue'
 import ActiveThreatStrip from './ActiveThreatStrip.vue'
+import InsuranceTabStrip from './components/InsuranceTabStrip.vue'
 import Card from '@/ui/Card.vue'
 import { useMeta } from '@/composables/useMeta'
 import {
@@ -189,6 +190,7 @@ const seedHint = computed(() =>
 </script>
 
 <template>
+  <InsuranceTabStrip />
   <AnalyticsScaffold
     domain="insurance"
     eyebrow="Vertical · Insurance"
