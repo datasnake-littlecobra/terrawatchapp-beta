@@ -15,6 +15,7 @@ const tabs: Tab[] = [
   { to: '/insurance/parametric', label: 'Parametric',       short: 'Parametric' },
   { to: '/insurance/portfolio',  label: 'Portfolio',        short: 'Portfolio' },
   { to: '/insurance/claims',     label: 'Claims',           short: 'Claims' },
+  { to: '/insurance/glossary',   label: 'Glossary',         short: 'Glossary' },
 ]
 
 function isActive(to: string): boolean {

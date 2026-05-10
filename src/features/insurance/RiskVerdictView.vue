@@ -15,6 +15,7 @@ import InsuranceTabStrip from './components/InsuranceTabStrip.vue'
 import DemoBadge from './components/DemoBadge.vue'
 import RiskMeter from './components/RiskMeter.vue'
 import PerilBars from './components/PerilBars.vue'
+import MetricInfoPanel from './components/MetricInfoPanel.vue'
 import { useMeta } from '@/composables/useMeta'
 import { RISK_VERDICTS, type RiskVerdict } from '@/data/insurance-mock'
 
@@ -143,6 +144,7 @@ const lastUpdatedRel = computed(() => {
           <p class="num text-xs text-ink-muted mt-1">
             {{ (selected.confidence * 100).toFixed(0) }}% · refreshed {{ lastUpdatedRel }}
           </p>
+          <MetricInfoPanel id="verdict.risk-meter" />
         </Card>
 
         <!-- Right: detail -->
@@ -171,6 +173,7 @@ const lastUpdatedRel = computed(() => {
               class="text-[10px] uppercase tracking-wider px-2 py-1 rounded border border-white/10 text-ink-muted bg-white/[0.02]"
             >{{ s }}</li>
           </ul>
+          <MetricInfoPanel id="verdict.detail" />
         </Card>
       </div>
 

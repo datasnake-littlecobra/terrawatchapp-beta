@@ -15,6 +15,7 @@ import VChart from 'vue-echarts'
 import Card from '@/ui/Card.vue'
 import InsuranceTabStrip from './components/InsuranceTabStrip.vue'
 import DemoBadge from './components/DemoBadge.vue'
+import MetricInfoPanel from './components/MetricInfoPanel.vue'
 import { useMeta } from '@/composables/useMeta'
 import { PORTFOLIO_POLICIES, EP_CURVES, fmtUsd, type Peril } from '@/data/insurance-mock'
 
@@ -470,6 +471,10 @@ const accumZones = computed(() => {
         </div>
       </div>
 
+      <Card padded class="mb-3">
+        <MetricInfoPanel id="portfolio.kpi-strip" standalone />
+      </Card>
+
       <!-- 80/20 callout -->
       <Card padded class="border-accent/30 bg-accent/[0.04] mb-3">
         <div class="flex items-start gap-3">
@@ -486,6 +491,7 @@ const accumZones = computed(() => {
             That's where to focus pricing-model improvements first.
           </p>
         </div>
+        <MetricInfoPanel id="portfolio.eighty-twenty" />
       </Card>
 
       <!-- Distribution chart -->
@@ -493,6 +499,7 @@ const accumZones = computed(() => {
         <h2 class="text-base font-semibold text-ink-primary mb-1">Risk distribution</h2>
         <p class="text-ink-muted text-xs mb-2">Policy count (bars) and aggregated exposure (line) per risk-score bucket.</p>
         <VChart :option="distOption" autoresize style="height: 300px;" />
+        <MetricInfoPanel id="portfolio.distribution" />
       </Card>
 
       <!-- Scatter + heatmap row -->
@@ -501,12 +508,14 @@ const accumZones = computed(() => {
           <h2 class="text-base font-semibold text-ink-primary mb-1">Pricing accuracy</h2>
           <p class="text-ink-muted text-xs mb-2">Each dot is a policy. Red = underpriced (cluster up-and-right reveals the repricing opportunity).</p>
           <VChart :option="scatterOption" autoresize style="height: 320px;" />
+          <MetricInfoPanel id="portfolio.pricing-scatter" />
         </Card>
 
         <Card padded>
           <h2 class="text-base font-semibold text-ink-primary mb-1">Peril × region concentration</h2>
           <p class="text-ink-muted text-xs mb-2">Cell shading = $B exposure where this region carries this peril.</p>
           <VChart :option="heatmapOption" autoresize style="height: 360px;" />
+          <MetricInfoPanel id="portfolio.heatmap" />
         </Card>
       </div>
 
@@ -535,6 +544,7 @@ const accumZones = computed(() => {
           </div>
         </div>
         <VChart :option="fairnessOption" autoresize style="height: 360px;" />
+        <MetricInfoPanel id="portfolio.fairness-scatter" />
       </Card>
 
       <!-- Per-peril savings at 1-in-100yr -->
@@ -550,6 +560,7 @@ const accumZones = computed(() => {
           is what reinsurance accumulators care about.
         </p>
         <VChart :option="perilSavingsOption" autoresize style="height: 220px;" />
+        <MetricInfoPanel id="portfolio.peril-savings" />
       </Card>
 
       <!-- Accumulation zones -->
@@ -570,6 +581,7 @@ const accumZones = computed(() => {
             </div>
           </li>
         </ul>
+        <MetricInfoPanel id="portfolio.accumulation-zones" />
       </Card>
 
       <p class="text-ink-muted/60 text-xs mt-5 max-w-3xl">

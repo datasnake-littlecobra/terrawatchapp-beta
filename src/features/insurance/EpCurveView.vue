@@ -14,6 +14,7 @@ import VChart from 'vue-echarts'
 import Card from '@/ui/Card.vue'
 import InsuranceTabStrip from './components/InsuranceTabStrip.vue'
 import DemoBadge from './components/DemoBadge.vue'
+import MetricInfoPanel from './components/MetricInfoPanel.vue'
 import { useMeta } from '@/composables/useMeta'
 import { EP_CURVES, fmtUsd } from '@/data/insurance-mock'
 
@@ -153,6 +154,7 @@ const epOption = computed(() => ({
       <!-- Chart -->
       <Card padded>
         <VChart :option="epOption" autoresize style="height: 380px;" />
+        <MetricInfoPanel id="ep-curves.main-chart" />
       </Card>
 
       <!-- Annotation callout -->
@@ -175,6 +177,7 @@ const epOption = computed(() => ({
             </p>
           </div>
         </div>
+        <MetricInfoPanel id="ep-curves.callout" />
       </Card>
 
       <!-- Detail table -->
@@ -204,6 +207,7 @@ const epOption = computed(() => ({
             </tbody>
           </table>
         </div>
+        <MetricInfoPanel id="ep-curves.detail-table" />
       </Card>
 
       <p class="text-ink-muted/60 text-xs mt-5 max-w-3xl">

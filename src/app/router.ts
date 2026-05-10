@@ -60,6 +60,8 @@ const routes: RouteRecordRaw[] = [
   { path: '/insurance/parametric', name: 'insurance-parametric', component: () => import('@/features/insurance/ParametricView.vue') },
   { path: '/insurance/portfolio',  name: 'insurance-portfolio',  component: () => import('@/features/insurance/PortfolioView.vue') },
   { path: '/insurance/claims',     name: 'insurance-claims',     component: () => import('@/features/insurance/ClaimsView.vue') },
+  // Phase 9.12.2 — Glossary: every per-card explainer rendered fully-expanded.
+  { path: '/insurance/glossary',   name: 'insurance-glossary',   component: () => import('@/features/insurance/GlossaryView.vue') },
 
   // Phase 9.8 — admin signup is OUTSIDE the gated /admin/* layout because
   // a non-admin user must be able to reach it (that's the whole point).

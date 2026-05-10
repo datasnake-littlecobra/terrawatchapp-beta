@@ -15,6 +15,7 @@ import VChart from 'vue-echarts'
 import Card from '@/ui/Card.vue'
 import InsuranceTabStrip from './components/InsuranceTabStrip.vue'
 import DemoBadge from './components/DemoBadge.vue'
+import MetricInfoPanel from './components/MetricInfoPanel.vue'
 import { useMeta } from '@/composables/useMeta'
 import {
   PARAMETRIC_CONTRACTS,
@@ -138,6 +139,10 @@ function sparkOption(c: ParametricContract) {
         </div>
       </div>
 
+      <Card padded class="mb-5">
+        <MetricInfoPanel id="parametric.kpi-strip" standalone />
+      </Card>
+
       <!-- Status filter chips -->
       <div class="flex flex-wrap gap-1.5 mb-4">
         <button
@@ -236,6 +241,10 @@ function sparkOption(c: ParametricContract) {
           </div>
         </Card>
       </div>
+
+      <Card padded class="mt-3">
+        <MetricInfoPanel id="parametric.contract-rows" standalone />
+      </Card>
 
       <!-- Compliance disclaimer -->
       <Card padded class="mt-5">

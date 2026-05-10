@@ -26,6 +26,7 @@ import HazardTopList    from './HazardTopList.vue'
 import CountyDetailPanel from './CountyDetailPanel.vue'
 import ActiveThreatStrip from './ActiveThreatStrip.vue'
 import InsuranceTabStrip from './components/InsuranceTabStrip.vue'
+import MetricInfoPanel from './components/MetricInfoPanel.vue'
 import Card from '@/ui/Card.vue'
 import { useMeta } from '@/composables/useMeta'
 import {
@@ -209,6 +210,11 @@ const seedHint = computed(() =>
         class="rounded-lg border border-caution/30 bg-caution/5 px-3 py-2.5 text-sm text-ink-primary"
       >{{ seedHint }}</p>
 
+      <!-- Hero counters explainer (hero counters are rendered by AnalyticsScaffold) -->
+      <Card padded>
+        <MetricInfoPanel id="overview.hero-counters" standalone />
+      </Card>
+
       <!-- State-level EAL chart -->
       <Card padded>
         <h2 class="text-base font-semibold text-ink-primary mb-1">
@@ -229,10 +235,14 @@ const seedHint = computed(() =>
           autoresize
           :style="{ height: `${Math.max(stateEal.length * 24 + 50, 320)}px` }"
         />
+        <MetricInfoPanel id="overview.state-eal-chart" />
       </Card>
 
       <!-- County detail panel (default = highest-EAL county) -->
       <CountyDetailPanel :detail="detail" :loading="detailLoading" />
+      <Card padded>
+        <MetricInfoPanel id="overview.county-detail" standalone />
+      </Card>
 
       <!-- Top-10 by hazard, three columns -->
       <div class="grid grid-cols-1 lg:grid-cols-3 gap-4">
@@ -252,9 +262,15 @@ const seedHint = computed(() =>
           @select="loadDetail"
         />
       </div>
+      <Card padded>
+        <MetricInfoPanel id="overview.hazard-top-lists" standalone />
+      </Card>
 
       <!-- Active threats overlay -->
       <ActiveThreatStrip :threats="threats" :min-risk="80" />
+      <Card padded>
+        <MetricInfoPanel id="overview.active-threats-strip" standalone />
+      </Card>
 
       <GapCallout
         domain="insurance"
