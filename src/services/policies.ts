@@ -109,9 +109,30 @@ export function parsePoliciesCsv(text: string): ParseResult {
     if (obj['state'])        row.state        = obj['state']
     if (obj['county'])       row.county       = obj['county']
     if (obj['county_fips'])  row.county_fips  = obj['county_fips']
-    if (obj['lat'])          row.lat          = Number(obj['lat'])
-    if (obj['lon'])          row.lon          = Number(obj['lon'])
-    if (obj['premium_usd'])  row.premium_usd  = Number(obj['premium_usd'])
+    if (obj['lat']) {
+      const v = Number(obj['lat'])
+      if (!Number.isFinite(v) || v < -90 || v > 90) {
+        errors.push({ line: i + 1, error: `lat out of range: "${obj['lat']}"` })
+        continue
+      }
+      row.lat = v
+    }
+    if (obj['lon']) {
+      const v = Number(obj['lon'])
+      if (!Number.isFinite(v) || v < -180 || v > 180) {
+        errors.push({ line: i + 1, error: `lon out of range: "${obj['lon']}"` })
+        continue
+      }
+      row.lon = v
+    }
+    if (obj['premium_usd']) {
+      const v = Number(obj['premium_usd'])
+      if (!Number.isFinite(v) || v < 0) {
+        errors.push({ line: i + 1, error: `premium_usd must be non-negative: "${obj['premium_usd']}"` })
+        continue
+      }
+      row.premium_usd = v
+    }
     if (obj['policy_class']) row.policy_class = obj['policy_class']
     if (obj['perils']) {
       row.perils = obj['perils'].split(/[;|]/).map((p) => p.trim()).filter(Boolean)

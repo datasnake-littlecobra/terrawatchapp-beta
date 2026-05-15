@@ -1,0 +1,26 @@
+policy_id_external,address,state,county,county_fips,lat,lon,exposure_usd,perils,premium_usd,policy_class
+ACME-001,1200 Ocean Dr Miami Beach FL,Florida,Miami-Dade,12086,25.7907,-80.1300,2400000,flood|wind|surge,18500,homeowners
+ACME-002,500 Brickell Ave Miami FL,Florida,Miami-Dade,12086,25.7617,-80.1918,4800000,flood|wind|surge,42000,commercial
+ACME-003,789 Coral Way Coral Gables FL,Florida,Miami-Dade,12086,25.7215,-80.2683,1200000,wind|surge,9800,homeowners
+ACME-004,1422 Seawall Blvd Galveston TX,Texas,Galveston,48167,29.3013,-94.7977,1800000,wind|surge|flood,16400,homeowners
+ACME-005,3001 Pelican Strand Tampa FL,Florida,Hillsborough,12057,27.9506,-82.4572,950000,wind|surge,7800,homeowners
+ACME-006,8800 Sage Hill Rd Houston TX,Texas,Harris,48201,29.7604,-95.3698,3200000,flood|wind,22500,commercial
+ACME-007,455 Sugar Land Town Sq Sugar Land TX,Texas,Fort Bend,48157,29.6197,-95.6349,720000,flood|wind,5400,homeowners
+ACME-008,12 The Woodlands Pkwy The Woodlands TX,Texas,Montgomery,48339,30.1658,-95.4613,890000,wind,6100,homeowners
+ACME-009,500 Mission St San Francisco CA,California,San Francisco,06075,37.7886,-122.3954,5200000,seismic|wildfire,38000,commercial
+ACME-010,1100 Healdsburg Ave Healdsburg CA,California,Sonoma,06097,38.6102,-122.8694,1450000,wildfire|seismic,17800,homeowners
+ACME-011,3344 Mountain View Rd Santa Rosa CA,California,Sonoma,06097,38.4404,-122.7141,980000,wildfire,11200,homeowners
+ACME-012,2200 Skyline Dr Oakland CA,California,Alameda,06001,37.8200,-122.1900,1100000,wildfire|seismic,12600,homeowners
+ACME-013,355 Folsom St Mission SF CA,California,San Francisco,06075,37.7665,-122.4090,1850000,seismic,14500,homeowners
+ACME-014,200 5th Ave Manhattan NY,New York,New York,36061,40.7411,-73.9897,2700000,wind|flood,20400,commercial
+ACME-015,118 Brooklyn Heights Promenade Brooklyn NY,New York,Kings,36047,40.6996,-73.9970,1600000,wind|flood|surge,13800,homeowners
+ACME-016,28 St Petersburg Pier St Petersburg FL,Florida,Pinellas,12103,27.7682,-82.6303,1320000,wind|surge|flood,11900,homeowners
+ACME-017,9 Bridgeport Way Sausalito CA,California,Marin,06041,37.8590,-122.4853,2100000,wildfire|seismic|surge,19400,homeowners
+ACME-018,1717 Bayshore Dr Tampa FL,Florida,Hillsborough,12057,27.9000,-82.5000,720000,wind|surge,6300,homeowners
+ACME-019,12 Pleasanton Ridge Pleasanton CA,California,Alameda,06001,37.6624,-121.8747,1480000,wildfire|seismic,16100,homeowners
+ACME-020,4400 Greenway Dr Houston TX,Texas,Harris,48201,29.7400,-95.4100,2600000,flood|wind,19200,commercial
+ACME-021,2200 Magnolia Bluff Galveston TX,Texas,Galveston,48167,29.2900,-94.8200,640000,wind|surge|flood,5100,homeowners
+ACME-022,5000 Marina Way Miami FL,Florida,Miami-Dade,12086,25.7700,-80.1400,52000000,flood|wind|surge,470000,commercial
+ACME-023,1200 Lombard St San Francisco CA,California,San Francisco,06075,37.8024,-122.4193,1750000,seismic|wildfire,15200,homeowners
+ACME-024,8 Foggy Hollow Ln Brooklyn NY,New York,Kings,36047,40.6480,-73.9710,540000,wind,4600,homeowners
+ACME-025,3 Test Negative Premium,Florida,Miami-Dade,12086,25.7800,-80.1500,820000,flood,-100,homeowners

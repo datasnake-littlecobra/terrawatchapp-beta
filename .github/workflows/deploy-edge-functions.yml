@@ -94,3 +94,16 @@ jobs:
       # gate as the other ingesters; no Supabase JWT required.
       - name: Deploy seed-fema-nri
         run: supabase functions deploy seed-fema-nri --no-verify-jwt=true
+
+      # Phase 9.13 — Insurance Risk API. Auth model is its own bearer
+      # API key (tw_... keys, hashed in public.api_keys, validated +
+      # rate-limited via api_key_check_and_bump RPC). NOT a Supabase
+      # JWT — so we skip JWT verify at the function gateway.
+      - name: Deploy insurance-risk-verdict
+        run: supabase functions deploy insurance-risk-verdict --no-verify-jwt=true
+
+      # Phase 9.14 — Authed CSV upload for tenant policy books. The
+      # function calls admin.auth.getUser(jwt) internally — Supabase
+      # verifies the JWT at the gateway first.
+      - name: Deploy policies-upload
+        run: supabase functions deploy policies-upload --no-verify-jwt=false
