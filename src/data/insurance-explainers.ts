@@ -429,6 +429,37 @@ export const EXPLAINERS: Record<string, MetricExplainer> = {
     business_decision: 'CROs use the heatmap to validate that treaty layers correspond to actual concentrations. Underwriting heads use it to set quarterly bind-authority caps in the hottest cells. Strategic-planning uses cool cells as expansion targets.',
   },
 
+  'portfolio.upload': {
+    id: 'portfolio.upload',
+    title: 'Portfolio CSV upload — tenants + RLS + bulk ingest',
+    tab: 'portfolio',
+    tabLabel: 'Portfolio',
+    calibration: 'live',
+    sourceLine: 'public.tenants + public.tenant_members + public.policies (migration 0033). RLS-gated per tenant. Upload via /functions/v1/policies-upload Edge Function.',
+    formulas: [
+      { label: 'Required CSV columns', expression: 'policy_id_external, exposure_usd',                                                                       explanation: 'The two fields without which the row is useless. policy_id_external is the tenant\'s own policy identifier; it must be unique per tenant.' },
+      { label: 'Optional columns',     expression: 'address, state, county, county_fips, lat, lon, perils, premium_usd, policy_class',                       explanation: 'When state + county are present but county_fips is not, the server resolves FIPS by looking up the (state, county) pair against public.fema_nri.' },
+      { label: 'Upsert key',           expression: '(tenant_id, policy_id_external)',                                                                        explanation: 'Idempotent. Re-uploading the same CSV updates existing rows; new rows are inserted. No row is duplicated.' },
+      { label: 'Capacity check',       expression: 'count(policies where tenant_id = X) + submitted ≤ tenants.policy_limit',                                 explanation: 'Enforced server-side. Returns 413 with the remaining capacity if exceeded. Default free-tier limit is 1,000 policies/tenant.' },
+      { label: 'RLS read policy',      expression: 'exists (select 1 from tenant_members tm where tm.tenant_id = policies.tenant_id and tm.user_id = auth.uid())', explanation: 'Anonymous sees nothing. Only members of a tenant can read that tenant\'s policies. Admins see everything.' },
+      { label: 'RLS write policy',     expression: 'same as read, AND tm.role in (\'owner\',\'member\')',                                                    explanation: 'Viewers can read but cannot mutate. Owners + members can insert / update / delete.' },
+    ],
+    observation: 'Two-step UI: pick (or create) a tenant, then drag-and-drop a CSV. The browser parses the file client-side (fast feedback on header / type errors), POSTs validated rows to the Edge Function, which re-validates, resolves county FIPS, and bulk-upserts in 500-row chunks. Max 50,000 rows per request.',
+    risk_interpretation: 'This is the moment the Portfolio dashboard stops being a demo and becomes the insurer\'s. The same charts (distribution, fairness scatter, peril × region heatmap, EP-tightening) now read their data through public.policies under RLS instead of from PORTFOLIO_POLICIES mock. Same calibrations, same math, different inputs.',
+    financial_interpretation: 'Commercial unlock. An MGA partner with 50k policies sees their actual concentration, their actual fairness gap, their actual reserve-adjustment recommendation in <2 minutes from sign-up. The cost of producing this analytics output for them is essentially zero — same SQL, different rows.',
+    business_decision: 'Sales motion: free-tier (1k policies) for evaluation; paid-tier (configurable limit, default 50k) for active contracts. Owners control tenant access via tenant_members. Viewers can be invited (reinsurance buyer, regulator) without giving them write capability.',
+    assumptions: [
+      'Self-serve tenant creation. Any authed user can create a tenant via create_tenant() and become its owner. If we later want to gate tenant creation to admins, change one line in the RPC.',
+      'Address-level CSVs not yet required. Tenants without lat/lon can still upload — they just lose intra-county resolution. Phase 9.12.3 (queued) adds parcel-level geocoding.',
+      'No real-time / streaming ingest. Upload is request-response. For high-frequency policy mutations (renewals, cancellations), the same endpoint is fine — just call it more often, idempotent upserts make it safe.',
+    ],
+    limitations: [
+      'Concentration alerts (daily cron + email) are NOT in this commit. Banner-only alerts are a queued follow-up — 9.14.1.',
+      'CSV export endpoint is stub-only (the "Export CSV" button on the dashboard). Wiring it server-side is a queued 9.14.2 follow-up; the read shape exists (RLS-protected select from public.policies).',
+      'No team-invite UI yet. Owners can\'t yet add members via UI; they need to invite by manual SQL or by sharing an admin-issued JWT. UI for this is the next polish task.',
+    ],
+  },
+
   'portfolio.accumulation-zones': {
     id: 'portfolio.accumulation-zones',
     title: 'Accumulation zones: high-risk region rollup',

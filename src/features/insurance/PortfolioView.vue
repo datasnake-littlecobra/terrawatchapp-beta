@@ -7,6 +7,7 @@
 // always need: what fraction of policies drive what fraction of CAT.
 
 import { computed } from 'vue'
+import { RouterLink } from 'vue-router'
 import { use } from 'echarts/core'
 import { CanvasRenderer } from 'echarts/renderers'
 import { BarChart, ScatterChart, HeatmapChart } from 'echarts/charts'
@@ -436,7 +437,13 @@ const accumZones = computed(() => {
             reinsurer reads first to find the 3% that drives 50% of CAT.
           </p>
         </div>
-        <DemoBadge class="hidden sm:inline-flex" />
+        <div class="flex flex-col items-end gap-2">
+          <DemoBadge class="hidden sm:inline-flex" />
+          <RouterLink
+            to="/insurance/portfolio/upload"
+            class="text-xs px-3 py-1.5 rounded-full border border-accent/40 text-accent hover:bg-accent/[0.08] transition-colors whitespace-nowrap"
+          >Upload your book →</RouterLink>
+        </div>
       </header>
 
       <!-- KPIs -->

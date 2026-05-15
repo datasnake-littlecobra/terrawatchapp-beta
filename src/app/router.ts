@@ -59,6 +59,8 @@ const routes: RouteRecordRaw[] = [
   { path: '/insurance/ep-curves',  name: 'insurance-ep-curves',  component: () => import('@/features/insurance/EpCurveView.vue') },
   { path: '/insurance/parametric', name: 'insurance-parametric', component: () => import('@/features/insurance/ParametricView.vue') },
   { path: '/insurance/portfolio',  name: 'insurance-portfolio',  component: () => import('@/features/insurance/PortfolioView.vue') },
+  // Phase 9.14 — Authed CSV upload of an insurer's policy book. RLS-gated per tenant.
+  { path: '/insurance/portfolio/upload', name: 'insurance-portfolio-upload', component: () => import('@/features/insurance/PortfolioUploadView.vue') },
   { path: '/insurance/claims',     name: 'insurance-claims',     component: () => import('@/features/insurance/ClaimsView.vue') },
   // Phase 9.12.2 — Glossary: every per-card explainer rendered fully-expanded.
   { path: '/insurance/glossary',   name: 'insurance-glossary',   component: () => import('@/features/insurance/GlossaryView.vue') },
