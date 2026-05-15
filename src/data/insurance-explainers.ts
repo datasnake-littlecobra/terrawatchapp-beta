@@ -507,6 +507,130 @@ export const EXPLAINERS: Record<string, MetricExplainer> = {
   },
 
   // =================================================================
+  // Phase 9.13.2 — Pipeline Showcase (sensor → transform → business)
+  // =================================================================
+
+  'pipeline.raw-timeseries': {
+    id: 'pipeline.raw-timeseries',
+    title: 'Raw sensor stream — per-sensor time-series',
+    tab: 'pipeline',
+    tabLabel: 'Pipeline',
+    calibration: 'calibrated',
+    sourceLine: 'public.measurements via public.measurements_series RPC. Sensors with source=\'datasnake\', source_tier=\'proprietary\' seeded by migration 0028; 10-min pg_cron keeps the stream live.',
+    formulas: [
+      { label: 'Series fetch',  expression: 'measurements_series(sensor, parameter, hours)', explanation: 'Auto-pivots: raw 10-min resolution if hours ≤ 36; hourly rollup with avg/min/max otherwise. Same RPC powering /monitoring/ocean.' },
+      { label: 'Freshness',     expression: 'now() - max(observed_at)',                     explanation: 'How long ago the latest measurement landed. The 10-min cron means a healthy sensor reads "minutes ago" continuously.' },
+    ],
+    observation: 'The input layer. Pick any ocean or ground DataSnake sensor, pick a parameter (temperature, humidity, salinity, etc.), pick a time range. The raw time-series chart and the latest-value tile render directly from public.measurements with no preprocessing.',
+    risk_interpretation: 'Raw measurements are the substrate that everything else in the pipeline is computed from. Sensor health (continuous fresh readings) is itself an underwriting signal — a sensor that goes silent suggests local disruption.',
+    financial_interpretation: 'Coverage is value. The dollar premium DataSnake can charge for an "API with sensor-backed anomalies" is proportional to the density of proprietary rows per county. This chart is the unit demonstration: this single sensor produces N readings/day across M parameters; multiply by the deployed fleet.',
+    business_decision: 'Operations teams use the freshness tile to triage sensor failures before they impact downstream parametric or anomaly outputs. Capacity planners use the deployed-fleet count to commit to coverage SLAs.',
+    assumptions: [
+      'Seeded data: 20 sensors (5 ocean + 15 ground) at metro locations matching the Command Center map. Real hardware will replace this without schema change — public.sensors / public.measurements stay identical.',
+      'Cron writes one synthetic row per (sensor, parameter) every 10 minutes. The cron function (ds_proprietary_tick) is replaced by the ingest endpoint when hardware ships.',
+    ],
+  },
+
+  'pipeline.hourly-rollup': {
+    id: 'pipeline.hourly-rollup',
+    title: 'Hourly rollup with min/max envelope',
+    tab: 'pipeline',
+    tabLabel: 'Pipeline',
+    calibration: 'live',
+    sourceLine: 'public.measurements_hourly materialized view (refreshed every 30 min by migration 0015).',
+    formulas: [
+      { label: 'Hourly bucket', expression: 'date_trunc(\'hour\', observed_at)',          explanation: 'Group raw 10-min samples into 60-min buckets.' },
+      { label: 'avg_value',     expression: 'avg(value) per (sensor, parameter, hour)',  explanation: 'Centerline of the chart. The "true" sensor reading after noise reduction.' },
+      { label: 'min/max band',  expression: '(min(value), max(value)) per bucket',       explanation: 'Shaded band on the chart. Width = intra-hour variability. A widening band is itself a useful signal (sensor wobble, environmental swing).' },
+    ],
+    observation: 'Same time-series, but at 7d+ ranges the chart switches to the hourly aggregate. The shaded band shows the within-hour min and max so you can see variability even when the centerline looks smooth.',
+    risk_interpretation: 'Noise reduction. A single noisy 10-min spike is rarely actionable; an hour of consistent elevation is. The rollup is what makes longer windows useful instead of overwhelming.',
+    financial_interpretation: 'Storage + query economics. Raw rows are pruned after 7 days (migration 0015); the hourly view retains 365 days. Long-window analytics (year-over-year peril trends, EP curve construction) read exclusively from the rollup, so the database stays small while the analytical reach stays long.',
+    business_decision: 'Analytics teams use the rollup for any window > 36h. Anomaly detection (next card) is computed on top of the rollup so the rolling z-score is stable against minute-level noise. Production queries should NEVER seq-scan public.measurements for windows beyond 36h — the rollup is the answer.',
+  },
+
+  'pipeline.anomaly-strip': {
+    id: 'pipeline.anomaly-strip',
+    title: 'Anomaly detection — rolling 24h z-score',
+    tab: 'pipeline',
+    tabLabel: 'Pipeline',
+    calibration: 'calibrated',
+    sourceLine: 'public.measurements_anomalies RPC (migration 0029). Reads measurements_hourly with a 24-row window.',
+    formulas: [
+      { label: 'Rolling mean μ', expression: 'avg(value) over (order by hour rows between 23 preceding and current)', explanation: '24-hour trailing mean. Smooths daily seasonality without ignoring it; the next-day reading is compared to the same hour-of-day baseline.' },
+      { label: 'Rolling std σ',  expression: 'stddev_samp(value) over (same window)',                                  explanation: 'Trailing standard deviation. Calibrates "how much variation is normal for this sensor right now."' },
+      { label: 'z-score',        expression: '(value - μ) / σ',                                                        explanation: 'Standardized distance from the rolling baseline. Unitless, comparable across parameters and sensors.' },
+      { label: 'is_anomaly',     expression: 'abs(z_score) > 2',                                                       explanation: 'Conventional cutoff — a 2-σ event happens ~5% of the time under a normal distribution, so |z|>2 is "noteworthy" and |z|>3 is "alarming."' },
+    ],
+    observation: 'Same time-series, now with a translucent rolling-mean ± 2σ band and red dots wherever |z| > 2. The seed migration injects one deliberate spike per sensor on day-3 at 14:00 so this chart always has something to flag for demo purposes.',
+    risk_interpretation: 'This is the signal that justifies the proprietary tier. Public data (FEMA NRI annual, NOAA hourly) cannot detect a fast-moving local anomaly — the dispatch latency is too long. A sensor reading 18°C above its rolling baseline is the leading indicator that public sources will reflect hours later.',
+    financial_interpretation: 'The anomaly is the parametric-trigger candidate. When an ocean pressure_dbar spike crosses a contractual threshold, a parametric contract fires and the payout is wired. The cost of building this layer (sensors + ingest) is justified entirely by the avoided false-positive rate compared to public-data-only models.',
+    business_decision: 'Operations teams subscribe to anomaly notifications. Claims-ops uses anomaly density in a county as the trigger to pre-position adjusters before a CAT event lands. Underwriters use historical anomaly density (last 90 days) as a modifier to the risk_score.',
+    limitations: [
+      'Rolling 24h window means the first 24 hours of any new sensor have no anomaly detection (insufficient history). Seeded data assumes the sensor has been live for 7 days.',
+      'Single-parameter detector. Compound events (heat + low-humidity + wind = wildfire) require the comparative-analysis layer (next card) plus business-logic on top.',
+    ],
+  },
+
+  'pipeline.comparative': {
+    id: 'pipeline.comparative',
+    title: 'Comparative analysis — Pearson r between two parameters',
+    tab: 'pipeline',
+    tabLabel: 'Pipeline',
+    calibration: 'calibrated',
+    sourceLine: 'public.measurements_compare + public.measurements_correlation RPCs (migration 0029). Inner-join on hour bucket.',
+    formulas: [
+      { label: 'Aligned pairs', expression: 'measurements_compare(sensor, A, B, hours)',     explanation: 'Inner-joins the hourly rollups of two parameters on (sensor_id, hour). Only hours with both readings are kept.' },
+      { label: 'Pearson r',     expression: 'corr(value_a, value_b) across the aligned pairs', explanation: 'Postgres aggregate. Returns a value in [-1, 1]: -1 = perfect inverse, 0 = no linear relationship, +1 = perfect positive.' },
+      { label: 'Interpretation',expression: '|r| < 0.1 noise · 0.1-0.3 weak · 0.3-0.5 moderate · 0.5-0.7 strong · >0.7 very strong', explanation: 'Standard psych/social-science thresholds. Sensor-physics tends to land in moderate-to-strong if the pair is physically related.' },
+    ],
+    observation: 'A dual-axis line chart of two parameters (e.g. temperature vs humidity) on the same sensor, plus a side tile showing the Pearson correlation coefficient and sample count.',
+    risk_interpretation: 'Physical sanity check. Temperature and humidity on a ground sensor should be negatively correlated (cool nights → high humidity). If they decorrelate, the sensor is either failing or experiencing a local anomaly (e.g. an irrigation event, or a fire suppressing humidity locally). Both are useful underwriting signals.',
+    financial_interpretation: 'Audit defensibility. When a parametric trigger fires, the post-event review will ask "was this a real event or a sensor fault?" A continued tight correlation between two physically-coupled parameters across the event window is evidence of sensor health. A decorrelation is evidence the firing is spurious.',
+    business_decision: 'Operations teams monitor pair-wise correlations as a sensor-health KPI. Underwriting auditors include the correlation history in the claims-defense packet. Compound-event detectors (Phase 9.15) read correlations as one of their inputs.',
+  },
+
+  'pipeline.business-outputs': {
+    id: 'pipeline.business-outputs',
+    title: 'Section C — sensor signal to underwriting action',
+    tab: 'pipeline',
+    tabLabel: 'Pipeline',
+    calibration: 'derived',
+    sourceLine: 'Each card cross-links the transformed signals (anomalies + correlations) to a specific dashboard tab where the signal materially changes a number.',
+    formulas: [
+      { label: 'Surge proxy → Parametric',    expression: 'rolling-max(pressure_dbar) over 1h ≥ contractual threshold',                              explanation: 'When the proxy crosses, the matching parametric contract\'s state transitions WARNING → TRIGGERED.' },
+      { label: 'Flood index → Risk Verdict',  expression: 'rolling-mean(soil_moisture_pct, 24h) - seasonal_baseline(county, week)',                  explanation: 'Positive deviation indicates persistent saturation; raises the eal_flood sub-score in the Risk Verdict output.' },
+      { label: 'Wildfire index → Risk Verdict', expression: 'air_temp_c × max(0, 1 - humidity_pct/100) × wind_speed_mps',                            explanation: 'Hot-Dry-Windy index. Above county-specific thresholds, raises eal_wildfire and forces a manual underwriting review.' },
+      { label: 'EP-tightening → EP Curves',   expression: 'aggregated anomaly density across the county sensor fleet',                                explanation: 'More sensors with corroborating readings → tighter tail uncertainty → narrower 1-in-100yr band. Drives the headline capital saving on /insurance/ep-curves.' },
+    ],
+    observation: 'Five cards spelling out the value chain: sensor signal (left column of each card) → derived metric (middle) → insurance action (right) → live dashboard link. Each card is a deep-link to the tab where the signal currently surfaces.',
+    risk_interpretation: 'The whole point. Without this section, the pipeline is interesting but commercially abstract. With it, the buyer sees exactly which existing dashboard their proprietary sensor data is going to enrich.',
+    financial_interpretation: 'Every dollar of premium-pricing accuracy, every dollar of capital released by tightened EP tails, every dollar of fast-pay parametric payout — they all originate as a transformed sensor signal flowing through one of these links. This section is the demo-day slide before the close.',
+    business_decision: 'Sales conversations open here. Risk-management committees track which links light up most for their book and prioritize sensor deployments accordingly. Reinsurance treaty negotiations cite specific links ("we reduced 1-in-100yr loss by $X via the EP-tightening signal").',
+  },
+
+  'pipeline.coverage-confidence': {
+    id: 'pipeline.coverage-confidence',
+    title: 'Coverage ratio → Risk API confidence boost',
+    tab: 'pipeline',
+    tabLabel: 'Pipeline',
+    calibration: 'derived',
+    sourceLine: 'Computed from public.sensors filtered to source_tier=\'proprietary\' joined to public.fema_nri by county polygon.',
+    formulas: [
+      { label: 'Coverage ratio',  expression: 'count(proprietary sensors in county) / max(1, public sensors in county)', explanation: 'A county with 10 DataSnake units and 1 NDBC/NWS reference has a 10:1 ratio.' },
+      { label: 'Confidence boost', expression: 'min(0.20, log10(1 + ratio) × 0.10)',                                     explanation: 'Logarithmic, capped at +0.20 absolute on the Risk API\'s `confidence` field. A 10× ratio yields ~+0.10; 100× ~+0.20.' },
+    ],
+    observation: 'A scalar boost added to the Risk API\'s `confidence` field when the queried county has dense proprietary coverage. Currently the API returns the public-data confidence only; this card describes the upgrade path.',
+    risk_interpretation: 'Confidence is the single most important post-score field for a procurement decision. An MGA underwriter weighs verdicts against their stated confidence — a 72/100 at 0.92 confidence triggers different actions than a 72/100 at 0.55. The proprietary-tier coverage ratio is the most defensible reason confidence should go up.',
+    financial_interpretation: 'This is the upsell mechanic for paid-tier API plans. Free-tier returns public-data confidence; paid-tier returns confidence boosted by proprietary coverage in the queried county. Customers self-select: counties they care about most are exactly the counties where they\'re willing to pay for higher confidence.',
+    business_decision: 'Sales engineers cite this when explaining the paid tier. Product teams choose sensor-deployment locations partly to lift this ratio in target counties. Coming online in a follow-up to Phase 9.13.2 — the API edge function currently returns `confidence` from the public-data formula only; wiring this boost is a one-day follow-up after a county-polygon migration.',
+    limitations: [
+      'Requires a county-polygon table to do the spatial join. Today we have fema_nri rows but not polygons. The polygon load is the same migration discussed for Phase 9.12.3 (address-level lookup).',
+      'Sensitive to sparse-coverage gaming — a single sensor in a low-public-coverage county yields a misleadingly high ratio. Production version will floor the public-sensor count at a meaningful minimum.',
+    ],
+  },
+
+  // =================================================================
   // Phase 9.13 — Risk API + Admin
   // =================================================================
 

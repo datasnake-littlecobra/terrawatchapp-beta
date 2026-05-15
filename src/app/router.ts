@@ -64,6 +64,8 @@ const routes: RouteRecordRaw[] = [
   { path: '/insurance/glossary',   name: 'insurance-glossary',   component: () => import('@/features/insurance/GlossaryView.vue') },
   // Phase 9.13 — Public docs for the Insurance Risk API (POST endpoint).
   { path: '/insurance/api',        name: 'insurance-api',        component: () => import('@/features/insurance/ApiDocsView.vue') },
+  // Phase 9.13.2 — Live sensor data pipeline showcase: raw → transformed → business outputs.
+  { path: '/insurance/pipeline',   name: 'insurance-pipeline',   component: () => import('@/features/insurance/PipelineShowcaseView.vue') },
 
   // Phase 9.8 — admin signup is OUTSIDE the gated /admin/* layout because
   // a non-admin user must be able to reach it (that's the whole point).

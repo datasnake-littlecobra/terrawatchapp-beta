@@ -15,6 +15,7 @@ const tabs: Tab[] = [
   { to: '/insurance/parametric', label: 'Parametric',       short: 'Parametric' },
   { to: '/insurance/portfolio',  label: 'Portfolio',        short: 'Portfolio' },
   { to: '/insurance/claims',     label: 'Claims',           short: 'Claims' },
+  { to: '/insurance/pipeline',   label: 'Pipeline',         short: 'Pipeline' },
   { to: '/insurance/api',        label: 'Risk API',         short: 'API' },
   { to: '/insurance/glossary',   label: 'Glossary',         short: 'Glossary' },
 ]
