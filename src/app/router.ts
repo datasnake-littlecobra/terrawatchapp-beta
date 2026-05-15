@@ -62,6 +62,8 @@ const routes: RouteRecordRaw[] = [
   { path: '/insurance/claims',     name: 'insurance-claims',     component: () => import('@/features/insurance/ClaimsView.vue') },
   // Phase 9.12.2 — Glossary: every per-card explainer rendered fully-expanded.
   { path: '/insurance/glossary',   name: 'insurance-glossary',   component: () => import('@/features/insurance/GlossaryView.vue') },
+  // Phase 9.13 — Public docs for the Insurance Risk API (POST endpoint).
+  { path: '/insurance/api',        name: 'insurance-api',        component: () => import('@/features/insurance/ApiDocsView.vue') },
 
   // Phase 9.8 — admin signup is OUTSIDE the gated /admin/* layout because
   // a non-admin user must be able to reach it (that's the whole point).
@@ -79,6 +81,8 @@ const routes: RouteRecordRaw[] = [
       { path: 'blog/new',  name: 'admin-blog-new', component: () => import('@/features/admin/AdminBlogGeneratorView.vue') },
       { path: 'blog/:id',  name: 'admin-blog-edit',component: () => import('@/features/admin/AdminBlogEditView.vue') },
       { path: 'health',    name: 'admin-health',   component: () => import('@/features/admin/AdminHealthView.vue') },
+      // Phase 9.13 — Insurance Risk API key issuance + revocation.
+      { path: 'api-keys',  name: 'admin-api-keys', component: () => import('@/features/admin/AdminApiKeysView.vue') },
     ],
   },
 

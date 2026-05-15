@@ -21,6 +21,8 @@ export type InsuranceTab =
   | 'parametric'
   | 'portfolio'
   | 'claims'
+  | 'api'
+  | 'admin'
 
 export interface ExplainerFormula {
   label: string
@@ -53,6 +55,8 @@ export const TAB_ORDER: InsuranceTab[] = [
   'parametric',
   'portfolio',
   'claims',
+  'api',
+  'admin',
 ]
 
 export const TAB_LABELS: Record<InsuranceTab, string> = {
@@ -63,6 +67,8 @@ export const TAB_LABELS: Record<InsuranceTab, string> = {
   'parametric': 'Parametric',
   'portfolio':  'Portfolio',
   'claims':     'Claims',
+  'api':        'Risk API',
+  'admin':      'Admin',
 }
 
 export const TAB_ROUTES: Record<InsuranceTab, string> = {
@@ -73,4 +79,6 @@ export const TAB_ROUTES: Record<InsuranceTab, string> = {
   'parametric': '/insurance/parametric',
   'portfolio':  '/insurance/portfolio',
   'claims':     '/insurance/claims',
+  'api':        '/insurance/api',
+  'admin':      '/admin/api-keys',
 }

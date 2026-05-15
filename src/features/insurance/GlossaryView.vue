@@ -28,6 +28,7 @@ const grouped = computed(() => {
   const result: Record<InsuranceTab, MetricExplainer[]> = {
     'overview': [], 'verdict': [], 'map': [], 'ep-curves': [],
     'parametric': [], 'portfolio': [], 'claims': [],
+    'api': [], 'admin': [],
   }
   for (const e of Object.values(EXPLAINERS)) {
     if (norm) {

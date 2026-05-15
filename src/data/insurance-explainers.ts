@@ -505,4 +505,66 @@ export const EXPLAINERS: Record<string, MetricExplainer> = {
       'Threshold logic is one-dimensional — it doesn\'t capture compound events where multiple perils together exceed individual thresholds.',
     ],
   },
+
+  // =================================================================
+  // Phase 9.13 — Risk API + Admin
+  // =================================================================
+
+  'api.risk-verdict-endpoint': {
+    id: 'api.risk-verdict-endpoint',
+    title: 'POST /functions/v1/insurance-risk-verdict',
+    tab: 'api',
+    tabLabel: 'Risk API',
+    calibration: 'live',
+    sourceLine: 'Edge Function backed by public.fema_nri + public.events; auth via public.api_keys hashed bearer',
+    formulas: [
+      { label: 'risk_score',         expression: 'fema_nri.risk_score',                                                                            explanation: 'FEMA NRI v3 composite (0-100). Combines EAL × Social Vulnerability ÷ Community Resilience.' },
+      { label: 'premium_multiplier', expression: 'min(5, 1 + max(0, risk_score - 40) × 0.045)',                                                    explanation: 'Linear above a 40-point base, capped at 5×. Constants in src/lib/insuranceScore.ts (PREMIUM_K, PREMIUM_MAX) — duplicated verbatim in the Edge Function inline copy.' },
+      { label: 'aal_multiplier',     expression: 'min(7, 1 + max(0, risk_score - 40) × 0.060)',                                                    explanation: 'Steeper than premium because reserves track tail expectation, not mean.' },
+      { label: 'per-peril sub-score', expression: 'min(10, log10(1 + (eal / $100M) × 9) × 10)',                                                    explanation: 'Logarithmic normalization because per-county EAL spans ~6 orders of magnitude. $100M = ~90th-percentile single-peril county EAL; counties at/above saturate at 10.' },
+      { label: 'confidence',         expression: '(1 - σ(perils)/10) × (populated_columns / 5)',                                                   explanation: 'Higher when peril sub-scores agree (low variance) AND the county has all 5 hazard columns populated.' },
+      { label: 'rate limit',         expression: 'api_key_check_and_bump(sha256(bearer)) atomically increments api_key_usage; if count > daily_limit → 429', explanation: 'RLS-bypass SECURITY DEFINER RPC. One row per (key_id, day) in api_key_usage. Free plan default 100/day, paid 10k/day.' },
+    ],
+    observation: 'A single HTTP endpoint. Accepts county_fips OR (state + county) OR address OR (lat + lon). Geocodes addresses via Open-Meteo (same precedent as src/services/geocode.ts). Resolves to a county_fips, fetches one row from fema_nri, returns the JSON verdict.',
+    risk_interpretation: 'This is the same computation the /insurance/verdict UI does, exposed as a callable B2B endpoint. An insurer integrates it into their underwriting engine and gets a sensor-grade risk score in <800ms per address.',
+    financial_interpretation: 'The endpoint is the smallest commercial product DataSnake can ship. Revenue rank per ChatGPT: HIGH. Free tier (100/day) onboards an MGA without procurement; paid tier (10k/day) is the upsell. The sensor_backed_anomalies field stays empty until Phase 9.13.1 proprietary sensors come online — that\'s the higher-tier value-add.',
+    business_decision: 'Underwriting engineers integrate this into their quote-engine. Pricing actuaries use the per-peril breakdown to argue for peril-specific deductibles. Claims-ops monitors active_events_in_state to time CAT-adjuster pre-deployment.',
+    toy_example: 'curl -X POST $URL/functions/v1/insurance-risk-verdict \\\n  -H "Authorization: Bearer tw_..." \\\n  -d \'{"address":"Miami Beach, FL"}\'\n\n→ { "verdict": { "risk_score": 72, "premium_multiplier": 2.44, ... } }',
+    assumptions: [
+      'FEMA NRI v3 is annual + county-level. Intra-county heterogeneity (riverside vs hilltop parcel in the same county) is invisible to this endpoint.',
+      'Address geocoding accuracy ≈ Open-Meteo geocoding accuracy (best-known place match, not parcel-level).',
+      'Calibration constants (PREMIUM_K, AAL_K, EAL_REF) are intentionally documented and version-locked. Changing them requires a coordinated update in both src/lib/insuranceScore.ts and the Edge Function inline copy.',
+    ],
+    limitations: [
+      'No parcel-level granularity. Use Phase 9.12.3 address lookup (queued) when an MGA wants address-resolution rather than county-resolution.',
+      'Live event modifiers are reported but do NOT yet adjust the score numerically — they are surfaced as active_events_in_state so the caller can apply their own state-level modifier.',
+    ],
+  },
+
+  'admin.api-keys': {
+    id: 'admin.api-keys',
+    title: 'API key admin: issue, list, revoke',
+    tab: 'admin',
+    tabLabel: 'Admin',
+    calibration: 'live',
+    sourceLine: 'public.api_keys + public.api_key_usage (migration 0027). Admin-only RLS via user_profiles.role = \'admin\'.',
+    formulas: [
+      { label: 'Key generation', expression: 'tw_ + base64url(32 random bytes) ≈ 47 chars total',  explanation: 'Generated client-side via crypto.getRandomValues. The raw key is hashed to sha256 hex and ONLY the hash is sent to the DB. Raw key is shown to the admin once at creation, never recoverable.' },
+      { label: 'Prefix',         expression: 'rawKey.slice(0, 11) → "tw_xxxxxxxx"',                explanation: 'First 11 characters stored in cleartext for display in the admin table. Lets an admin identify a key without ever seeing the secret part.' },
+      { label: 'Usage today',    expression: 'select count from api_key_usage where day = today()', explanation: 'Per-key daily counter, atomically bumped by the api_key_check_and_bump RPC.' },
+      { label: 'Revocation',     expression: 'update api_keys set revoked_at = now() where id = ?', explanation: 'Soft-delete. Once revoked_at is non-null, the partial index api_keys_active_idx (where revoked_at is null) excludes the row, so the Edge Function returns 401 on next request.' },
+    ],
+    observation: 'A table of all issued keys with prefix, tenant, plan, daily limit, today\'s usage, created/last-used timestamps, status, and a revoke button. The "+ Issue new key" button opens a modal that generates a random key, displays it ONCE for copy-to-clipboard, and saves the hash to the database.',
+    risk_interpretation: 'Operational control surface. Every issued key represents a tenant relationship. Revoke when a key leaks (e.g. accidental git commit) or a contract ends. Watch usage_today vs daily_limit to spot abuse or upgrade opportunities.',
+    financial_interpretation: 'Free-tier keys (100/day) are essentially marketing — generous enough to demo, low enough that abuse is contained. Paid-tier keys (10k/day) represent active commercial relationships. The day a paid key consistently hits its limit is the day to schedule a tier-up call.',
+    business_decision: 'When onboarding a new MGA partner: issue free-tier key for evaluation. When they sign a paid contract: issue a fresh paid-tier key and revoke the free one. When a key fires more than 80% of daily limit for 3+ days: outbound for upgrade conversation.',
+    assumptions: [
+      'Raw keys are NEVER stored — only their sha256 hash. Lost a key? Re-issue, do not "recover".',
+      'Keys are global: a single key authenticates against the Risk API for whoever holds it. v1 has no per-key endpoint scoping; that\'s a Phase 9.13.x follow-up.',
+    ],
+    limitations: [
+      'No usage-export endpoint yet (would help for monthly billing). Read api_key_usage directly via SQL for now.',
+      'No per-key IP allowlist or referrer restrictions. If a key leaks, revoke + re-issue.',
+    ],
+  },
 }
