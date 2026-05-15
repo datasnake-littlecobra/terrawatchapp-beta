@@ -630,6 +630,35 @@ export const EXPLAINERS: Record<string, MetricExplainer> = {
     ],
   },
 
+  'pipeline.data-contract': {
+    id: 'pipeline.data-contract',
+    title: 'Hardware → software data contract',
+    tab: 'pipeline',
+    tabLabel: 'Pipeline',
+    calibration: 'live',
+    sourceLine: 'docs/DATASNAKE_SENSOR_DATA_CONTRACT.md (v1, Phase 9.13.1). Schema: public.sensors + public.measurements (long-format) + public.sensor_deployments + public.sensor_calibrations.',
+    formulas: [
+      { label: 'Required per measurement', expression: '(sensor_id, parameter, value, unit, observed_at)',                                                  explanation: 'The five fields without which the row is meaningless. PK is (sensor_id, parameter, observed_at).' },
+      { label: 'Recommended provenance',   expression: '+ quality_flag, firmware_version, calibration_id, signature, received_at',                          explanation: 'Optional fields nullable on insert so existing public ingesters work unchanged. Become REQUIRED for DataSnake proprietary writes once hardware ships.' },
+      { label: 'Optional operational',     expression: '+ raw_payload, location_at_observation, battery_voltage, signal_strength_dbm',                       explanation: 'Sub-keys inside metadata or as columns where useful. Operational telemetry — predicts sensor failure 24-72h before data quality drops.' },
+      { label: 'Lifecycle (per sensor)',   expression: 'sensor_deployments(deployed_at, removed_at, location, depth_m/height_m_agl, operator) + sensor_calibrations(applied_at, retired_at, constants, protocol)', explanation: 'Append-only history tables. Past calibrations never deleted so any measurement is reproducible exactly.' },
+    ],
+    observation: 'The written interface between DataSnake hardware engineering and the software team. Captures: what fields the hardware MUST send per measurement, what the software commits to in exchange (idempotent ingest, <60s p95 latency, additive schema evolution), and the controlled parameter vocabulary for every sensor variant (ocean / ground met / ground AQ / ground soil / ground fire).',
+    risk_interpretation: 'Without this doc the hardware schedule is coupled to the software schedule by tribal knowledge. With it, hardware can ship a new sensor variant knowing exactly what fields to populate; software can ship a new ingest endpoint knowing exactly what to validate. The DataSnake-managed Vultr Postgres database that today serves datasnake.io/datapreview is migrating to the same schema so both databases use the same vocabulary.',
+    financial_interpretation: 'The doc is the operational artifact that makes the proprietary tier sellable. Every commercial pitch — Risk API paid plan, parametric contracts, portfolio sensor-coverage upsell — references "DataSnake sensor data" as a thing. This doc is what that thing IS. Without it, the pitch is wishful; with it, the pitch is auditable.',
+    business_decision: 'Hardware team reads it before designing a new sensor variant — they know what columns the firmware must produce. Software team reads it before adding a new analytics surface — they know what fields are guaranteed. Insurance buyers in due diligence read it to verify the data integrity story (ed25519 signatures, append-only calibration history) is real, not marketing.',
+    toy_example: 'A new ocean sensor variant ds-sub-ocean-v3 ships with an added chlorophyll-a fluorometer.\n\nHardware team:\n  1. Open a docs PR adding `chlorophyll_a_ugl` (already in the vocabulary §3.1).\n  2. After 7-day notice, firmware starts uplinking the new parameter.\n  3. No software change required — the long-format measurements table accepts it.\n\nSoftware team:\n  1. Add `chlorophyll_a_ugl` to VARIANT_PARAMETERS["ds-sub-ocean"] in src/services/sensorPipeline.ts.\n  2. The /insurance/pipeline parameter picker now offers it.\n  3. Zero schema migration.',
+    assumptions: [
+      'TerraWatch Supabase and DataSnake Vultr Postgres are independently operated but share this contract. One-way replication is a 1-day software task with no schema work.',
+      'Ed25519 signature verification adds <2ms per row at ingest. Negligible against the network round-trip.',
+      'Calibration constants in sensor_calibrations.constants are sensor-variant-specific. The constants jsonb structure is defined per-variant in the variant\'s firmware spec, not in this doc.',
+    ],
+    limitations: [
+      'v1 contract. Vibration / spectroscopy / hyperspectral imagery payloads (future variants) will need an extension — large opaque blobs don\'t belong in measurements.value (double). Path forward: a sibling measurements_blobs table keyed by (sensor_id, parameter, observed_at) with a bytea payload.',
+      'Streaming ingest (sub-second latency) is out of scope for v1. The 60s p95 SLA is for batch HTTPS POST.',
+    ],
+  },
+
   // =================================================================
   // Phase 9.13 — Risk API + Admin
   // =================================================================

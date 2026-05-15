@@ -444,9 +444,13 @@ watch([param, paramB, hours], reloadAll)
         <code class="text-accent">source_tier='proprietary'</code>)
         plus a 10-min cron that keeps the stream fresh. When real
         DataSnake hardware ships, the seed migration is replaced by
-        the ingest endpoint described in
-        <code class="text-accent">docs/DATASNAKE_SENSOR_DATA_CONTRACT.md</code>
-        — schema unchanged, only the source of writes changes.
+        the ingest endpoint described in the
+        <strong class="text-ink-muted">hardware → software data contract</strong>
+        (see <code class="text-accent">docs/DATASNAKE_SENSOR_DATA_CONTRACT.md</code>
+        in the repo, or the
+        <span class="text-accent">pipeline.data-contract</span>
+        entry in <code class="text-accent">/insurance/glossary</code>) —
+        schema unchanged, only the source of writes changes.
       </p>
     </div>
   </div>
