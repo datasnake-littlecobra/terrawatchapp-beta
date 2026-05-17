@@ -144,6 +144,7 @@ All ten ingesters check the shared `x-ingest-secret` header against the `INGEST_
 | Function | Auth | What it does | Phase |
 | --- | --- | --- | --- |
 | `signup-admin` | Anonymous; admin-signup-code is the gate | Single-call admin signup that skips Supabase's email-confirmation friction. | 9.8 |
+| `signup-tenant` | Anonymous; optional `tenant_signup_code` Vault secret is the gate (open if absent) | Tenant signup with email-confirmation bypass. Used by `/auth/sign-in` → "Sign up" so free-tier Supabase email throttling never blocks new users. | 9.16.0 |
 
 ### One-shot manual
 

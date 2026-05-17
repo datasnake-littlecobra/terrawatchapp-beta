@@ -180,6 +180,34 @@ export const useAuthStore = defineStore('auth', {
       return { requiresConfirmation }
     },
 
+    // Phase 9.16.0 — server-side signup that bypasses Supabase's email
+    // confirmation step. Mirrors the signup-admin path but for non-admin
+    // users. Free-tier Supabase email is throttled to ~4/hour and
+    // flaky; this function calls admin.createUser({ email_confirm: true })
+    // server-side, then signs the user in immediately. Custom SMTP
+    // (Resend / Postmark / SES) is still the right long-term fix.
+    async signUpTenantBypass(email: string, password: string, betaCode?: string): Promise<void> {
+      if (!supabase) throw new Error('Sign-up unavailable.')
+      this.status = 'loading'
+      this.error = null
+      const baseUrl = (import.meta.env.VITE_SUPABASE_URL as string | undefined) ?? ''
+      const url = `${baseUrl}/functions/v1/signup-tenant`
+      const r = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, password, beta_code: betaCode ?? '' }),
+      })
+      const body = await r.json().catch(() => ({}))
+      if (!r.ok) {
+        this.status = 'error'
+        const msg = body.error ?? `Sign-up failed (HTTP ${r.status})`
+        this.error = msg
+        throw new Error(msg)
+      }
+      // Sign in immediately so the user lands authenticated.
+      await this.signInWithPassword(email, password)
+    },
+
     // -------- Phase 10: Password reset ------------------------------------
     async resetPasswordForEmail(email: string): Promise<void> {
       if (!supabase) throw new Error('Reset unavailable.')

@@ -189,6 +189,35 @@ update vault.secrets
 5. Subsequently, log in via the regular `/auth/sign-in` — same
    credentials work for both surfaces.
 
+### Tenant (non-admin) signup — Phase 9.16.0
+
+Regular signups via `/auth/sign-in` → "Sign up" tab also bypass
+email confirmation. The flow calls the `signup-tenant` Edge
+Function which creates the user with `email_confirm=true`
+(mirroring the admin path) so free-tier Supabase email throttling
+never blocks new tenants.
+
+**Optional gating** — to require a code before anyone can sign up
+(useful during private beta), set a Vault secret:
+
+```sql
+-- Open mode is the default: anyone can sign up, no code needed.
+-- Set this secret only when you want to gate signups.
+select vault.create_secret('<your-shared-beta-code>', 'tenant_signup_code');
+```
+
+When the secret is **absent** (default), the signup flow runs
+open. When it's **set**, the signup form's "Beta access code"
+field becomes mandatory and must match. Rotate by updating the
+Vault row; remove by deleting the secret.
+
+**Long-term fix** — configure a real SMTP provider in Supabase
+Dashboard → Project Settings → Auth → SMTP Settings (Resend
+has a 3,000-emails/month free tier; Postmark, SES, SendGrid all
+work). Once custom SMTP is configured you can revert the signup
+flow to `supabase.auth.signUp()` if you want the traditional
+confirmation-email flow back.
+
 **If you signed up earlier and got stuck** (signed up but never received
 the confirmation email and now hit "invalid credentials" on sign-in),
 you have two recovery paths:

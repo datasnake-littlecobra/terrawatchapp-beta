@@ -107,3 +107,10 @@ jobs:
       # verifies the JWT at the gateway first.
       - name: Deploy policies-upload
         run: supabase functions deploy policies-upload --no-verify-jwt=false
+
+      # Phase 9.16.0 — tenant signup with email-confirmation bypass.
+      # Anonymous endpoint (optional Vault-backed beta code is the gate).
+      # Mirrors signup-admin's pattern so the free-tier email throttle
+      # never blocks new-tenant signups.
+      - name: Deploy signup-tenant
+        run: supabase functions deploy signup-tenant --no-verify-jwt=true

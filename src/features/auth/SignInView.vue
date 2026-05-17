@@ -25,6 +25,7 @@ const variant = ref<Variant>('signIn')
 const email = ref('')
 const password = ref('')
 const passwordConfirm = ref('')
+const betaCode = ref('')
 const submitting = ref(false)
 const localError = ref<string | null>(null)
 
@@ -77,11 +78,11 @@ async function submitPassword() {
         localError.value = en.auth.pwMismatch
         return
       }
-      const { requiresConfirmation } = await auth.signUpWithPassword(e, p)
-      if (requiresConfirmation) {
-        confirmEmailSent.value = true
-        return
-      }
+      // Phase 9.16.0: use the email-bypass signup so Supabase's flaky
+      // free-tier email confirmation never blocks the user. The optional
+      // beta_code field is sent verbatim; the server validates against the
+      // 'tenant_signup_code' Vault secret (open if absent).
+      await auth.signUpTenantBypass(e, p, betaCode.value.trim() || undefined)
       goNext()
     } else {
       await auth.signInWithPassword(e, p)
@@ -264,6 +265,18 @@ function switchVariant(v: Variant) {
               autocomplete="new-password"
               :placeholder="en.auth.passwordPlaceholder"
               class="mt-1 w-full bg-surface-0 border border-white/10 rounded-xl h-12 px-3 text-base"
+            />
+          </label>
+          <!-- Phase 9.16.0: optional beta code. When the Vault secret
+               'tenant_signup_code' is not set, this field is ignored. -->
+          <label v-if="variant === 'signUp'" class="block">
+            <span class="text-ink-muted text-xs tracking-widest uppercase">Beta access code <span class="normal-case text-ink-muted/60">(optional)</span></span>
+            <input
+              v-model="betaCode"
+              type="text"
+              autocomplete="off"
+              placeholder="leave blank if you don't have one"
+              class="mt-1 w-full bg-surface-0 border border-white/10 rounded-xl h-12 px-3 text-base font-mono"
             />
           </label>
           <Button type="submit" variant="primary" size="lg" block :disabled="submitting">
