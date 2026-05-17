@@ -158,7 +158,13 @@ interface Body {
   address?:     string
 }
 
-async function handle(req: Request): Promise<Response> {
+interface LogCtx { keyId: string | null }
+
+// Phase 9.16 — handleInner mutates ctx.keyId once it's known (after
+// auth). The outer serve wrapper writes the log row with the final
+// status code + duration. Per-request ctx instance keeps this safe
+// under concurrency.
+async function handleInner(req: Request, ctx: LogCtx): Promise<Response> {
   if (req.method === 'OPTIONS') return new Response(null, { status: 204, headers: CORS_HEADERS })
   if (req.method !== 'POST') return json({ error: 'Method not allowed' }, 405)
 
@@ -181,6 +187,7 @@ async function handle(req: Request): Promise<Response> {
   const { data: quotaRows, error: quotaErr } = await admin.rpc('api_key_check_and_bump', { p_key_hash: keyHash })
   if (quotaErr) return json({ error: 'Auth check failed', detail: quotaErr.message }, 500)
   const quota = (quotaRows as any[] | null)?.[0]
+  if (quota?.key_id) ctx.keyId = quota.key_id
   if (!quota || !quota.allowed) {
     if (quota && quota.daily_limit > 0 && quota.remaining === 0) {
       return json(
@@ -317,4 +324,54 @@ async function handle(req: Request): Promise<Response> {
   )
 }
 
-serve(handle)
+// Phase 9.16 — wrap handleInner so every request emits one row into
+// public.api_request_log. The log INSERT runs after the response is
+// constructed; failures are swallowed so logging never breaks the
+// API. 7-day retention is enforced by the nightly prune cron.
+async function ipHash(req: Request): Promise<string | null> {
+  const ip = req.headers.get('x-forwarded-for')?.split(',')[0]?.trim()
+    ?? req.headers.get('cf-connecting-ip')
+    ?? req.headers.get('x-real-ip')
+    ?? null
+  if (!ip) return null
+  const enc = new TextEncoder().encode(ip)
+  const buf = await crypto.subtle.digest('SHA-256', enc)
+  return Array.from(new Uint8Array(buf)).map((b) => b.toString(16).padStart(2, '0')).join('').slice(0, 32)
+}
+
+serve(async (req: Request) => {
+  const start = Date.now()
+  const ctx: LogCtx = { keyId: null }
+  let res: Response
+  try {
+    res = await handleInner(req, ctx)
+  } catch (e) {
+    res = json({ error: e instanceof Error ? e.message : 'Unhandled' }, 500)
+  }
+  const durationMs = Date.now() - start
+
+  // Fire-and-forget log INSERT (don't await — return ASAP).
+  if (req.method === 'POST' && SUPABASE_URL && SUPABASE_SERVICE_ROLE_KEY) {
+    (async () => {
+      try {
+        const admin = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
+          auth: { persistSession: false, autoRefreshToken: false },
+        })
+        const ip = await ipHash(req)
+        const ua = req.headers.get('user-agent')
+        await admin.from('api_request_log').insert({
+          key_id:      ctx.keyId,
+          endpoint:    'insurance-risk-verdict',
+          status_code: res.status,
+          duration_ms: durationMs,
+          ip_hash:     ip,
+          user_agent:  ua,
+        })
+      } catch {
+        // Swallow — logging failures never propagate.
+      }
+    })()
+  }
+
+  return res
+})

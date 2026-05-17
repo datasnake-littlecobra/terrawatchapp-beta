@@ -98,6 +98,13 @@ All children of `/admin` mount inside `AdminLayout.vue` which enforces both auth
 | `/admin/blog/:id` | `AdminBlogEditView.vue` | 9.9 | Edit + publish. |
 | `/admin/health` | `AdminHealthView.vue` | 9.10 | Ingest health: per-source status + 7-day trend strip. |
 | `/admin/api-keys` | `AdminApiKeysView.vue` | 9.13 | Issue / revoke Insurance Risk API keys. Raw key shown once. |
+| `/admin/console` | redirect → `/admin/console/overview` | 9.16 | Operations Console root. |
+| `/admin/console/overview` | `OverviewTab.vue` | 9.16 | Fleet + throughput + commercial counters. |
+| `/admin/console/devices` | `DevicesTab.vue` | 9.16 | Sensor fleet table + filter + per-sensor detail. Reads `sensor_freshness` materialized view. |
+| `/admin/console/streams` | `StreamsTab.vue` | 9.16 | Live data flow: raw + anomaly + comparative across the full fleet (not just proprietary). |
+| `/admin/console/apis` | `ApisTab.vue` | 9.16 | Embeds `AdminApiKeysView` + adds 7-day request volume + 24h endpoint health. |
+| `/admin/console/monitor` | `MonitoringTab.vue` | 9.16 | Embeds `AdminHealthView` + adds `pg_cron` job status table. |
+| `/admin/console/impact` | `InsuranceImpactTab.vue` | 9.16 | The sensor → climate signal → underwriting decision bridge. Five sections, one per insurance surface. |
 
 ---
 

@@ -75,6 +75,8 @@ const sections = computed<NavSection[]>(() => {
     base.push({
       label: 'Admin',
       items: [
+        { to: '/admin/console',  icon: 'sparkle',  label: 'Ops Console' },
+        { to: '/admin/api-keys', icon: 'shield',   label: 'API keys' },
         { to: '/admin/blog',     icon: 'pen',      label: 'Blog dashboard' },
         { to: '/admin/blog/new', icon: 'sparkle',  label: 'Generate post' },
         { to: '/admin/health',   icon: 'bell',     label: 'Ingest health' },

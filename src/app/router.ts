@@ -87,6 +87,20 @@ const routes: RouteRecordRaw[] = [
       { path: 'health',    name: 'admin-health',   component: () => import('@/features/admin/AdminHealthView.vue') },
       // Phase 9.13 — Insurance Risk API key issuance + revocation.
       { path: 'api-keys',  name: 'admin-api-keys', component: () => import('@/features/admin/AdminApiKeysView.vue') },
+      // Phase 9.16 — Operations Console: unified admin workspace.
+      {
+        path: 'console',
+        component: () => import('@/features/admin/console/OpsConsoleLayout.vue'),
+        children: [
+          { path: '',         redirect: '/admin/console/overview' },
+          { path: 'overview', name: 'admin-console-overview', component: () => import('@/features/admin/console/OverviewTab.vue') },
+          { path: 'devices',  name: 'admin-console-devices',  component: () => import('@/features/admin/console/DevicesTab.vue') },
+          { path: 'streams',  name: 'admin-console-streams',  component: () => import('@/features/admin/console/StreamsTab.vue') },
+          { path: 'apis',     name: 'admin-console-apis',     component: () => import('@/features/admin/console/ApisTab.vue') },
+          { path: 'monitor',  name: 'admin-console-monitor',  component: () => import('@/features/admin/console/MonitoringTab.vue') },
+          { path: 'impact',   name: 'admin-console-impact',   component: () => import('@/features/admin/console/InsuranceImpactTab.vue') },
+        ],
+      },
     ],
   },
 
