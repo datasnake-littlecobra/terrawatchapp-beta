@@ -169,8 +169,14 @@ export async function uploadPolicies(tenantId: string, rows: PolicyUploadRow[]):
     { body: { tenant_id: tenantId, rows } },
   )
   if (error) {
-    const ctx = (error as { context?: { status?: number; error?: { message?: string } } }).context
-    const msg = ctx?.error?.message ?? error.message ?? 'Upload failed'
+    let msg = error.message || 'Upload failed'
+    try {
+      const ctx = (error as { context?: Response }).context
+      if (ctx && typeof ctx.json === 'function') {
+        const body = await ctx.clone().json()
+        if (body?.error) msg = `${body.error} (HTTP ${ctx.status})`
+      }
+    } catch { /* fall through */ }
     throw new Error(msg)
   }
   if (!data) throw new Error('No response from server')
