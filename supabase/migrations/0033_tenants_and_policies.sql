@@ -30,18 +30,6 @@ create index if not exists tenants_slug_idx on public.tenants (slug);
 
 alter table public.tenants enable row level security;
 
--- Members see their tenant rows. Admins see all (defense in depth, e.g.
--- for the future admin tenant-management UI).
-create policy "members read tenants"
-  on public.tenants for select
-  using (
-    public.is_admin()
-    or exists (
-      select 1 from public.tenant_members tm
-      where tm.tenant_id = tenants.id and tm.user_id = auth.uid()
-    )
-  );
-
 -- =====================================================================
 -- 2. tenant_members — many users per tenant
 -- =====================================================================
@@ -59,8 +47,31 @@ create index if not exists tenant_members_user_idx on public.tenant_members (use
 
 alter table public.tenant_members enable row level security;
 
+-- =====================================================================
+-- 3. RLS policies — created AFTER both tables exist so the
+--    "tenants" policy can reference "tenant_members" and vice versa.
+--    Wrapped with `drop ... if exists` so this migration is safe to
+--    re-run after a partial failure (we hit one in the first deploy
+--    when the original ordering tried to create the tenants policy
+--    before tenant_members existed).
+-- =====================================================================
+
+-- Members see their tenant rows. Admins see all (defense in depth, e.g.
+-- for the future admin tenant-management UI).
+drop policy if exists "members read tenants" on public.tenants;
+create policy "members read tenants"
+  on public.tenants for select
+  using (
+    public.is_admin()
+    or exists (
+      select 1 from public.tenant_members tm
+      where tm.tenant_id = tenants.id and tm.user_id = auth.uid()
+    )
+  );
+
 -- A member sees their own member rows + any rows in tenants they belong
 -- to (so they can see who their teammates are). Admins see everything.
+drop policy if exists "members read tenant_members" on public.tenant_members;
 create policy "members read tenant_members"
   on public.tenant_members for select
   using (
@@ -73,7 +84,7 @@ create policy "members read tenant_members"
   );
 
 -- =====================================================================
--- 3. policies — the insurer's book
+-- 4. policies — the insurer's book
 -- =====================================================================
 
 create table if not exists public.policies (
@@ -101,6 +112,7 @@ create index if not exists policies_tenant_exposure_idx on public.policies (tena
 
 alter table public.policies enable row level security;
 
+drop policy if exists "tenant members read policies" on public.policies;
 create policy "tenant members read policies"
   on public.policies for select
   using (
@@ -114,6 +126,7 @@ create policy "tenant members read policies"
 -- Writes (insert/update/delete) restricted to owner+member roles. Viewers
 -- can read but cannot mutate. The Edge Function (policies-upload) uses
 -- service-role and bypasses RLS but checks tenant membership manually.
+drop policy if exists "tenant owner/member write policies" on public.policies;
 create policy "tenant owner/member write policies"
   on public.policies for all
   using (
@@ -136,7 +149,7 @@ create policy "tenant owner/member write policies"
   );
 
 -- =====================================================================
--- 4. Helper RPCs
+-- 5. Helper RPCs
 -- =====================================================================
 
 -- The tenants the current user belongs to. Used by the dashboard

@@ -89,6 +89,7 @@ create index if not exists api_request_log_at_idx
 alter table public.api_request_log enable row level security;
 
 -- Admin-only read; the Edge Function writes via service role.
+drop policy if exists "admin read api_request_log" on public.api_request_log;
 create policy "admin read api_request_log"
   on public.api_request_log for select
   using (public.is_admin());
