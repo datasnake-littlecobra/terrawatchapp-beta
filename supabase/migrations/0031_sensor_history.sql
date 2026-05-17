@@ -35,6 +35,7 @@ create index if not exists sensor_deployments_active_idx
   on public.sensor_deployments (sensor_id) where removed_at is null;
 
 alter table public.sensor_deployments enable row level security;
+drop policy if exists "deployments readable by everyone" on public.sensor_deployments;
 create policy "deployments readable by everyone"
   on public.sensor_deployments for select to anon, authenticated using (true);
 
@@ -64,6 +65,7 @@ create index if not exists sensor_calibrations_active_idx
   on public.sensor_calibrations (sensor_id) where retired_at is null;
 
 alter table public.sensor_calibrations enable row level security;
+drop policy if exists "calibrations readable by everyone" on public.sensor_calibrations;
 create policy "calibrations readable by everyone"
   on public.sensor_calibrations for select to anon, authenticated using (true);
 
