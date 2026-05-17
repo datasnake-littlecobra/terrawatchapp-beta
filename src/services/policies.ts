@@ -160,21 +160,21 @@ export async function uploadPolicies(tenantId: string, rows: PolicyUploadRow[]):
   if (!supabase) throw new Error('Supabase not configured')
   const session = (await supabase.auth.getSession()).data.session
   if (!session) throw new Error('Not signed in')
-  const baseUrl = (import.meta.env.VITE_SUPABASE_URL as string | undefined) ?? ''
-  const url = `${baseUrl}/functions/v1/policies-upload`
-  const r = await fetch(url, {
-    method: 'POST',
-    headers: {
-      'Authorization': `Bearer ${session.access_token}`,
-      'Content-Type':  'application/json',
-    },
-    body: JSON.stringify({ tenant_id: tenantId, rows }),
-  })
-  const body = await r.json().catch(() => ({}))
-  if (!r.ok) {
-    throw new Error(body.error || `Upload failed (HTTP ${r.status})`)
+  // Use supabase.functions.invoke (NOT raw fetch) — invoke attaches the
+  // apikey + Authorization headers Supabase's Edge Function gateway
+  // requires before our function runs. Raw fetch fails the preflight
+  // with a CORS-shaped "Failed to fetch" error.
+  const { data, error } = await supabase.functions.invoke<UploadResult & { error?: string }>(
+    'policies-upload',
+    { body: { tenant_id: tenantId, rows } },
+  )
+  if (error) {
+    const ctx = (error as { context?: { status?: number; error?: { message?: string } } }).context
+    const msg = ctx?.error?.message ?? error.message ?? 'Upload failed'
+    throw new Error(msg)
   }
-  return body as UploadResult
+  if (!data) throw new Error('No response from server')
+  return data as UploadResult
 }
 
 // =====================================================================

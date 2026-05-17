@@ -186,21 +186,31 @@ export const useAuthStore = defineStore('auth', {
     // flaky; this function calls admin.createUser({ email_confirm: true })
     // server-side, then signs the user in immediately. Custom SMTP
     // (Resend / Postmark / SES) is still the right long-term fix.
+    //
+    // NOTE: uses supabase.functions.invoke (NOT raw fetch) — invoke
+    // attaches the apikey + Authorization: Bearer <anon> headers that
+    // Supabase's Edge Function gateway requires before our function
+    // runs. Raw fetch fails the gateway preflight with a CORS-shaped
+    // "Failed to fetch" error.
     async signUpTenantBypass(email: string, password: string, betaCode?: string): Promise<void> {
       if (!supabase) throw new Error('Sign-up unavailable.')
       this.status = 'loading'
       this.error = null
-      const baseUrl = (import.meta.env.VITE_SUPABASE_URL as string | undefined) ?? ''
-      const url = `${baseUrl}/functions/v1/signup-tenant`
-      const r = await fetch(url, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, password, beta_code: betaCode ?? '' }),
-      })
-      const body = await r.json().catch(() => ({}))
-      if (!r.ok) {
+      const { data, error } = await supabase.functions.invoke<{ ok: boolean; user_id: string; email: string; error?: string }>(
+        'signup-tenant',
+        { body: { email, password, beta_code: betaCode ?? '' } },
+      )
+      if (error) {
+        // FunctionsHttpError carries the server's response body in context.
+        const ctx = (error as { context?: { status?: number; error?: { message?: string } } }).context
+        const msg = ctx?.error?.message ?? error.message ?? 'Sign-up failed'
         this.status = 'error'
-        const msg = body.error ?? `Sign-up failed (HTTP ${r.status})`
+        this.error = msg
+        throw new Error(msg)
+      }
+      if (!data?.ok) {
+        const msg = data?.error ?? 'Sign-up failed'
+        this.status = 'error'
         this.error = msg
         throw new Error(msg)
       }
