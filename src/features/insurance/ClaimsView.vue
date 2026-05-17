@@ -9,6 +9,7 @@ import { computed, ref } from 'vue'
 import Card from '@/ui/Card.vue'
 import InsuranceTabStrip from './components/InsuranceTabStrip.vue'
 import DemoBadge from './components/DemoBadge.vue'
+import MetricInfoPanel from './components/MetricInfoPanel.vue'
 import { useMeta } from '@/composables/useMeta'
 import {
   CLAIMS_EVENTS,
@@ -126,6 +127,7 @@ function ratioColor(r: number): string {
             </p>
           </div>
         </div>
+        <MetricInfoPanel id="claims.event-context" />
       </Card>
 
       <!-- Summary KPIs -->
@@ -147,6 +149,10 @@ function ratioColor(r: number): string {
           <p class="num text-2xl font-semibold text-caution mt-1">{{ fmtUsd(summary.atRisk) }}</p>
         </div>
       </div>
+
+      <Card padded class="mb-5">
+        <MetricInfoPanel id="claims.summary-kpis" standalone />
+      </Card>
 
       <!-- Claims table -->
       <Card v-if="event" padded>
@@ -202,6 +208,7 @@ function ratioColor(r: number): string {
             </tbody>
           </table>
         </div>
+        <MetricInfoPanel id="claims.claim-verdicts" />
       </Card>
 
       <!-- Notes per inconsistent claim -->

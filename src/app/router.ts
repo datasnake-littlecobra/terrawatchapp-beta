@@ -59,7 +59,15 @@ const routes: RouteRecordRaw[] = [
   { path: '/insurance/ep-curves',  name: 'insurance-ep-curves',  component: () => import('@/features/insurance/EpCurveView.vue') },
   { path: '/insurance/parametric', name: 'insurance-parametric', component: () => import('@/features/insurance/ParametricView.vue') },
   { path: '/insurance/portfolio',  name: 'insurance-portfolio',  component: () => import('@/features/insurance/PortfolioView.vue') },
+  // Phase 9.14 — Authed CSV upload of an insurer's policy book. RLS-gated per tenant.
+  { path: '/insurance/portfolio/upload', name: 'insurance-portfolio-upload', component: () => import('@/features/insurance/PortfolioUploadView.vue') },
   { path: '/insurance/claims',     name: 'insurance-claims',     component: () => import('@/features/insurance/ClaimsView.vue') },
+  // Phase 9.12.2 — Glossary: every per-card explainer rendered fully-expanded.
+  { path: '/insurance/glossary',   name: 'insurance-glossary',   component: () => import('@/features/insurance/GlossaryView.vue') },
+  // Phase 9.13 — Public docs for the Insurance Risk API (POST endpoint).
+  { path: '/insurance/api',        name: 'insurance-api',        component: () => import('@/features/insurance/ApiDocsView.vue') },
+  // Phase 9.13.2 — Live sensor data pipeline showcase: raw → transformed → business outputs.
+  { path: '/insurance/pipeline',   name: 'insurance-pipeline',   component: () => import('@/features/insurance/PipelineShowcaseView.vue') },
 
   // Phase 9.8 — admin signup is OUTSIDE the gated /admin/* layout because
   // a non-admin user must be able to reach it (that's the whole point).
@@ -77,6 +85,22 @@ const routes: RouteRecordRaw[] = [
       { path: 'blog/new',  name: 'admin-blog-new', component: () => import('@/features/admin/AdminBlogGeneratorView.vue') },
       { path: 'blog/:id',  name: 'admin-blog-edit',component: () => import('@/features/admin/AdminBlogEditView.vue') },
       { path: 'health',    name: 'admin-health',   component: () => import('@/features/admin/AdminHealthView.vue') },
+      // Phase 9.13 — Insurance Risk API key issuance + revocation.
+      { path: 'api-keys',  name: 'admin-api-keys', component: () => import('@/features/admin/AdminApiKeysView.vue') },
+      // Phase 9.16 — Operations Console: unified admin workspace.
+      {
+        path: 'console',
+        component: () => import('@/features/admin/console/OpsConsoleLayout.vue'),
+        children: [
+          { path: '',         redirect: '/admin/console/overview' },
+          { path: 'overview', name: 'admin-console-overview', component: () => import('@/features/admin/console/OverviewTab.vue') },
+          { path: 'devices',  name: 'admin-console-devices',  component: () => import('@/features/admin/console/DevicesTab.vue') },
+          { path: 'streams',  name: 'admin-console-streams',  component: () => import('@/features/admin/console/StreamsTab.vue') },
+          { path: 'apis',     name: 'admin-console-apis',     component: () => import('@/features/admin/console/ApisTab.vue') },
+          { path: 'monitor',  name: 'admin-console-monitor',  component: () => import('@/features/admin/console/MonitoringTab.vue') },
+          { path: 'impact',   name: 'admin-console-impact',   component: () => import('@/features/admin/console/InsuranceImpactTab.vue') },
+        ],
+      },
     ],
   },
 

@@ -180,6 +180,44 @@ export const useAuthStore = defineStore('auth', {
       return { requiresConfirmation }
     },
 
+    // Phase 9.16.0 — server-side signup that bypasses Supabase's email
+    // confirmation step. Mirrors the signup-admin path but for non-admin
+    // users. Free-tier Supabase email is throttled to ~4/hour and
+    // flaky; this function calls admin.createUser({ email_confirm: true })
+    // server-side, then signs the user in immediately. Custom SMTP
+    // (Resend / Postmark / SES) is still the right long-term fix.
+    //
+    // NOTE: uses supabase.functions.invoke (NOT raw fetch) — invoke
+    // attaches the apikey + Authorization: Bearer <anon> headers that
+    // Supabase's Edge Function gateway requires before our function
+    // runs. Raw fetch fails the gateway preflight with a CORS-shaped
+    // "Failed to fetch" error.
+    async signUpTenantBypass(email: string, password: string, betaCode?: string): Promise<void> {
+      if (!supabase) throw new Error('Sign-up unavailable.')
+      this.status = 'loading'
+      this.error = null
+      const { data, error } = await supabase.functions.invoke<{ ok: boolean; user_id: string; email: string; error?: string }>(
+        'signup-tenant',
+        { body: { email, password, beta_code: betaCode ?? '' } },
+      )
+      if (error) {
+        // FunctionsHttpError carries the server's response body in context.
+        const ctx = (error as { context?: { status?: number; error?: { message?: string } } }).context
+        const msg = ctx?.error?.message ?? error.message ?? 'Sign-up failed'
+        this.status = 'error'
+        this.error = msg
+        throw new Error(msg)
+      }
+      if (!data?.ok) {
+        const msg = data?.error ?? 'Sign-up failed'
+        this.status = 'error'
+        this.error = msg
+        throw new Error(msg)
+      }
+      // Sign in immediately so the user lands authenticated.
+      await this.signInWithPassword(email, password)
+    },
+
     // -------- Phase 10: Password reset ------------------------------------
     async resetPasswordForEmail(email: string): Promise<void> {
       if (!supabase) throw new Error('Reset unavailable.')

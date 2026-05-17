@@ -12,6 +12,7 @@ import { useRouter } from 'vue-router'
 import Card from '@/ui/Card.vue'
 import InsuranceTabStrip from './components/InsuranceTabStrip.vue'
 import DemoBadge from './components/DemoBadge.vue'
+import MetricInfoPanel from './components/MetricInfoPanel.vue'
 import { useMeta } from '@/composables/useMeta'
 import {
   RISK_CELLS,
@@ -217,6 +218,10 @@ watch(layer, () => renderMarkers())
         </div>
       </div>
 
+      <Card padded class="mb-5">
+        <MetricInfoPanel id="map.kpi-strip" standalone />
+      </Card>
+
       <!-- Layer toggles -->
       <div class="flex flex-wrap items-center gap-1.5 mb-3">
         <span class="text-[10px] uppercase tracking-widest text-ink-muted/60 mr-1">Layer:</span>
@@ -274,8 +279,13 @@ watch(layer, () => renderMarkers())
               </span>
             </li>
           </ul>
+          <MetricInfoPanel id="map.rising-risk-sidebar" />
         </Card>
       </div>
+
+      <Card padded class="mt-3">
+        <MetricInfoPanel id="map.markers" standalone />
+      </Card>
 
       <p class="text-ink-muted/60 text-xs mt-3 max-w-3xl">
         <strong class="text-ink-muted">Tip:</strong>
