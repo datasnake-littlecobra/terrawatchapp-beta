@@ -44,21 +44,26 @@ interface SignupBody {
 }
 
 serve(async (req) => {
+  console.log(`[signup-tenant] ${req.method} ${req.url}`)
   if (req.method === 'OPTIONS') return new Response(null, { status: 204, headers: CORS_HEADERS })
   if (req.method !== 'POST')    return json({ error: 'Method not allowed' }, 405)
   if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) {
+    console.error('[signup-tenant] missing env: SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY')
     return json({ error: 'Server misconfigured' }, 500)
   }
 
   let body: SignupBody
   try {
     body = await req.json() as SignupBody
-  } catch {
+  } catch (e) {
+    console.error('[signup-tenant] invalid JSON body:', e)
     return json({ error: 'Invalid JSON body' }, 400)
   }
   const email = (body.email ?? '').trim().toLowerCase()
   const password = body.password ?? ''
   const betaCode = (body.beta_code ?? '').trim()
+
+  console.log(`[signup-tenant] attempt email=${email} pw_len=${password.length} beta_code_present=${betaCode.length > 0}`)
 
   if (!email || !email.includes('@')) return json({ error: 'Valid email required.' }, 400)
   if (password.length < 8)            return json({ error: 'Password must be at least 8 characters.' }, 400)
@@ -72,8 +77,12 @@ serve(async (req) => {
   const { data: codeOk, error: codeErr } = await admin.rpc('check_tenant_signup_code', {
     submitted_code: betaCode,
   })
-  if (codeErr) return json({ error: 'Code validation failed' }, 500)
+  if (codeErr) {
+    console.error('[signup-tenant] check_tenant_signup_code RPC failed:', codeErr)
+    return json({ error: `Code validation failed: ${codeErr.message}` }, 500)
+  }
   if (codeOk !== true) {
+    console.log(`[signup-tenant] code rejected (codeOk=${codeOk})`)
     return json({ error: 'Invalid signup code.' }, 403)
   }
 
@@ -84,6 +93,7 @@ serve(async (req) => {
     email_confirm: true,
   })
   if (createErr || !created.user) {
+    console.error('[signup-tenant] createUser failed:', createErr)
     return json({ error: createErr?.message ?? 'Sign-up failed' }, 400)
   }
 
@@ -91,5 +101,6 @@ serve(async (req) => {
   //    inserted a user_profiles row with role='user'. Nothing else to
   //    do — the caller signs in next via signInWithPassword.
 
+  console.log(`[signup-tenant] success user_id=${created.user.id}`)
   return json({ ok: true, user_id: created.user.id, email })
 })
