@@ -120,3 +120,14 @@ jobs:
       # gateway since the cron path has no user JWT to verify.
       - name: Deploy generate-linkedin-post
         run: supabase functions deploy generate-linkedin-post --no-verify-jwt=true
+
+      # Phase 9.17.1 — LinkedIn OAuth code exchange. Admin-JWT path
+      # only; not callable by cron.
+      - name: Deploy linkedin-oauth-callback
+        run: supabase functions deploy linkedin-oauth-callback --no-verify-jwt=true
+
+      # Phase 9.17.1 — LinkedIn publish. Two callers: admin via JWT
+      # for "Publish now" button, pg_cron via x-ingest-secret for the
+      # Mon/Wed/Fri 14:00 UTC schedule.
+      - name: Deploy publish-linkedin-post
+        run: supabase functions deploy publish-linkedin-post --no-verify-jwt=true

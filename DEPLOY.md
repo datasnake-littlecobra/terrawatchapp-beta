@@ -165,9 +165,80 @@ oldest topic whose sha256 hash isn't in `public.linkedin_posts` yet.
 status `draft`. Click the row → edit content + hashtags → click
 Approve → click "Copy to clipboard" → paste into LinkedIn manually.
 
-**Phase 9.17.1** (queued, not yet shipped) will add OAuth + auto-publish.
-Until then, "approved" status is just an editorial flag — nothing
-auto-posts.
+### LinkedIn auto-publish (Phase 9.17.1 — OAuth + cron)
+
+When this runs, approved drafts get posted to the DataSnake company
+page automatically on the Mon/Wed/Fri 14:00 UTC cron, OR immediately
+via the "Publish now" button next to each approved draft.
+
+**One-time LinkedIn Developer Console setup**:
+
+1. Open https://www.linkedin.com/developers/apps → DataSnake app.
+2. **Auth** tab → "Authorized redirect URLs for your app" → add:
+   `https://hyperlocalwatch.com/admin/linkedin/oauth-callback`
+3. **Products** tab → request **Community Management API**
+   (self-serve, instant approval). This unlocks
+   `w_organization_social` + `r_organization_admin` scopes.
+4. **Auth** tab → copy Client ID + Client Secret.
+
+**Set the secrets** (server-side — never in the repo):
+
+```bash
+# Supabase Edge Function secrets — used by linkedin-oauth-callback
+# + publish-linkedin-post.
+supabase secrets set LINKEDIN_CLIENT_ID=<your-app-id>
+supabase secrets set LINKEDIN_CLIENT_SECRET=<your-app-secret>
+```
+
+**Set the build-time client ID** so the Vue app can construct the
+authorize URL:
+
+```bash
+# In your hosting provider's env vars (Cloudflare Pages / Vercel),
+# add this and rebuild:
+VITE_LINKEDIN_CLIENT_ID=<your-app-id>
+```
+
+The client ID is meant to be public (OAuth convention — redirect-URI
+whitelist on the LinkedIn side is the security boundary). The
+secret stays server-side only.
+
+**Set the function URLs in Vault** (so pg_cron can POST to them):
+
+```sql
+-- Run once in Supabase SQL Editor, replacing <ref> with your project ref.
+select vault.create_secret(
+  'https://<ref>.supabase.co/functions/v1/generate-linkedin-post',
+  'generate_linkedin_post_url'
+);
+select vault.create_secret(
+  'https://<ref>.supabase.co/functions/v1/publish-linkedin-post',
+  'publish_linkedin_post_url'
+);
+```
+
+**Connect the page**:
+
+1. Visit `/admin/linkedin/connect`.
+2. Click "Connect DataSnake LinkedIn" → LinkedIn consent screen.
+3. After consent you're redirected back, tokens are exchanged
+   server-side and stored in `public.linkedin_oauth`.
+4. The status page should now show "✓ Connected — DataSnake".
+
+**Verify**:
+
+- Approve a draft in `/admin/linkedin`.
+- Click "publish now" next to it → check the LinkedIn page for the post.
+- Confirm the row in `public.linkedin_posts` now has `status='published'`
+  + `linkedin_urn` populated.
+
+**Cron schedules** (migration 0038):
+
+- `linkedin-generate-mwf` — Mon/Wed/Fri 09:00 UTC — drafts next topic.
+- `linkedin-publish-mwf`  — Mon/Wed/Fri 14:00 UTC — publishes oldest approved.
+
+5-hour gap is the human review window. Adjust cron expressions in
+`0038_linkedin_cron.sql` if you want different cadences.
 
 Migration `0036_linkedin_posts.sql` adds `linkedin_posts` +
 `linkedin_generator_usage` tables. Both admin-only RLS.

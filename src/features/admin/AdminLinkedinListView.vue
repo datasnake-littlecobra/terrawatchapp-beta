@@ -16,14 +16,18 @@ import {
   type LinkedInPost,
   type LinkedInPostStatus,
 } from '@/services/linkedinPosts'
+import { fetchLinkedInStatus, publishLinkedInPostNow, type LinkedInStatus } from '@/services/linkedinOauth'
 import Card from '@/ui/Card.vue'
 
 const posts = ref<LinkedInPost[]>([])
+const oauthStatus = ref<LinkedInStatus | null>(null)
 const loading = ref(true)
 const generating = ref(false)
 const errorMsg = ref<string | null>(null)
 const lastGenerated = ref<string | null>(null)
+const lastPublished = ref<string | null>(null)
 const busyId = ref<string | null>(null)
+const publishingId = ref<string | null>(null)
 const filter = ref<'all' | LinkedInPostStatus>('all')
 
 const FILTERS: Array<{ key: 'all' | LinkedInPostStatus; label: string }> = [
@@ -49,12 +53,39 @@ const countsByStatus = computed(() => {
 async function refresh() {
   loading.value = true
   try {
-    posts.value = await listLinkedInPosts()
+    const [list, status] = await Promise.all([
+      listLinkedInPosts(),
+      fetchLinkedInStatus().catch(() => null),
+    ])
+    posts.value = list
+    oauthStatus.value = status
     errorMsg.value = null
   } catch (e) {
     errorMsg.value = e instanceof Error ? e.message : 'Load failed'
   } finally {
     loading.value = false
+  }
+}
+
+async function publishNow(p: LinkedInPost) {
+  if (publishingId.value) return
+  publishingId.value = p.id
+  lastPublished.value = null
+  errorMsg.value = null
+  try {
+    const r = await publishLinkedInPostNow(p.id)
+    if (r.ok && r.linkedin_urn) {
+      lastPublished.value = `Published to LinkedIn: ${r.linkedin_urn}`
+    } else if (r.error) {
+      errorMsg.value = r.error
+    } else if (r.message) {
+      errorMsg.value = r.message
+    }
+    await refresh()
+  } catch (e) {
+    errorMsg.value = e instanceof Error ? e.message : 'Publish failed'
+  } finally {
+    publishingId.value = null
   }
 }
 
@@ -148,10 +179,37 @@ onMounted(refresh)
       </button>
     </header>
 
+    <!-- OAuth status banner -->
+    <Card v-if="oauthStatus" padded :class="oauthStatus.connected ? 'border-safe/30' : 'border-caution/40'">
+      <div class="flex items-center justify-between gap-3 flex-wrap">
+        <div class="flex items-center gap-3">
+          <span
+            class="text-[10px] uppercase tracking-wider px-2 py-0.5 rounded border font-semibold"
+            :class="oauthStatus.connected ? 'border-safe/40 text-safe bg-safe/[0.08]' : 'border-caution/40 text-caution bg-caution/[0.08]'"
+          >{{ oauthStatus.connected ? 'Connected' : 'Not connected' }}</span>
+          <p class="text-sm text-ink-primary">
+            <template v-if="oauthStatus.connected">
+              {{ oauthStatus.orgName ?? oauthStatus.orgVanityName ?? 'LinkedIn page' }}
+              <span v-if="oauthStatus.needsRefresh" class="text-caution text-xs ml-2">(token expiring — auto-refresh on next publish)</span>
+              <span v-if="oauthStatus.needsReconnect" class="text-danger text-xs ml-2">(refresh token expiring — reconnect)</span>
+            </template>
+            <template v-else>
+              Phase 9.17.1 — connect to enable auto-publish.
+            </template>
+          </p>
+        </div>
+        <RouterLink
+          to="/admin/linkedin/connect"
+          class="text-xs px-3 py-1.5 rounded-lg border border-white/10 text-ink-muted hover:text-ink-primary hover:bg-white/5 transition-colors"
+        >{{ oauthStatus.connected ? 'Manage connection' : 'Connect →' }}</RouterLink>
+      </div>
+    </Card>
+
     <p v-if="errorMsg" class="text-danger text-sm">{{ errorMsg }}</p>
     <p v-if="lastGenerated" class="text-safe text-sm">
       ✓ Drafted: <span class="text-ink-primary">{{ lastGenerated }}</span>
     </p>
+    <p v-if="lastPublished" class="text-safe text-sm">{{ lastPublished }}</p>
 
     <!-- Status filter chips -->
     <div class="flex flex-wrap gap-1.5">
@@ -209,6 +267,16 @@ onMounted(refresh)
               :disabled="busyId === p.id"
               @click="setStatus(p, 'approved')"
             >approve</button>
+            <button
+              v-if="(p.status === 'approved' || p.status === 'failed') && oauthStatus?.connected"
+              type="button"
+              class="text-xs text-accent hover:text-accent-deep font-semibold disabled:opacity-40"
+              :disabled="publishingId === p.id"
+              @click="publishNow(p)"
+            >
+              <span v-if="publishingId === p.id">publishing…</span>
+              <span v-else>publish now</span>
+            </button>
             <button
               v-if="p.status === 'draft' || p.status === 'approved'"
               type="button"

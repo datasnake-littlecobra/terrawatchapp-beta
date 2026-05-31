@@ -88,8 +88,11 @@ const routes: RouteRecordRaw[] = [
       // Phase 9.13 — Insurance Risk API key issuance + revocation.
       { path: 'api-keys',  name: 'admin-api-keys', component: () => import('@/features/admin/AdminApiKeysView.vue') },
       // Phase 9.17 — LinkedIn auto-poster: drafts queue + edit.
-      { path: 'linkedin',     name: 'admin-linkedin',      component: () => import('@/features/admin/AdminLinkedinListView.vue') },
-      { path: 'linkedin/:id', name: 'admin-linkedin-edit', component: () => import('@/features/admin/AdminLinkedinEditView.vue') },
+      { path: 'linkedin',                 name: 'admin-linkedin',          component: () => import('@/features/admin/AdminLinkedinListView.vue') },
+      // Phase 9.17.1 — OAuth connect + callback (placed BEFORE :id so it doesn't collide).
+      { path: 'linkedin/connect',         name: 'admin-linkedin-connect',  component: () => import('@/features/admin/AdminLinkedinConnectView.vue') },
+      { path: 'linkedin/oauth-callback',  name: 'admin-linkedin-callback', component: () => import('@/features/admin/AdminLinkedinCallbackView.vue') },
+      { path: 'linkedin/:id',             name: 'admin-linkedin-edit',     component: () => import('@/features/admin/AdminLinkedinEditView.vue') },
       // Phase 9.16 — Operations Console: unified admin workspace.
       {
         path: 'console',
