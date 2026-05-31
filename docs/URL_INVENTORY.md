@@ -63,6 +63,24 @@ Everything below is reachable without a sign-in. Linkable from marketing.
 | `/insurance/api` | `ApiDocsView.vue` | 9.13 | Public Risk API docs (curl/node/python tabs). |
 | `/insurance/pipeline` | `PipelineShowcaseView.vue` | 9.13.2 | Raw sensor → transform → business narrative. |
 
+### Weather Intelligence section — Phase 9.18
+
+Public-facing technical-due-diligence section. Sibling of `/insurance`,
+different audience (insurance buyers in technical evaluation). Every
+chart-bearing page ships with the `SqlInterpretationPanel` exposing
+the literal SQL query that produced its data — the visible
+differentiator from First Street + Zesty AI.
+
+| Route | View | Phase | Notes |
+| --- | --- | --- | --- |
+| `/weather-intelligence` | `LandingView.vue` | 9.18.0 | Thesis + 5 use-case cards + competitor matrix. |
+| `/weather-intelligence/flash-flood` | `FlashFloodView.vue` | 9.18.0 (foundation), 9.18.1 (real chart) | Miami Beach May 2024 replay. |
+| `/weather-intelligence/seismic-precursor` | `SeismicPrecursorView.vue` | 9.18.0, 9.18.5 (RPC + chart) | Bay Area foreshock clustering on USGS catalog. |
+| `/weather-intelligence/parametric` | `ParametricView.vue` | 9.18.0, 9.18.3 (interactive back-test) | Pick sensor + threshold + payout, simulate against history. |
+| `/weather-intelligence/underwriting` | `UnderwritingView.vue` | 9.18.0 | Static FEMA NRI vs FEMA + live modifiers. |
+| `/weather-intelligence/claims` | `ClaimsView.vue` | 9.18.0, 9.18.4 (IBTrACS + verdict UI) | Hurricane Ian replay → 2hr verdict. |
+| `/weather-intelligence/glossary` | `GlossaryView.vue` | 9.18.0 | Every explainer in the section, fully expanded, searchable. |
+
 ---
 
 ## Auth-only — signed-in user required, but NOT admin

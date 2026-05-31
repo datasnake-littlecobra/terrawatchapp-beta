@@ -69,6 +69,17 @@ const routes: RouteRecordRaw[] = [
   // Phase 9.13.2 — Live sensor data pipeline showcase: raw → transformed → business outputs.
   { path: '/insurance/pipeline',   name: 'insurance-pipeline',   component: () => import('@/features/insurance/PipelineShowcaseView.vue') },
 
+  // Phase 9.18 — Weather Intelligence section. Sibling of /insurance,
+  // public-facing technical due-diligence layer. Every chart ships with the
+  // SqlInterpretationPanel showing the literal query that produced it.
+  { path: '/weather-intelligence',                   name: 'wi-landing',     component: () => import('@/features/weather-intelligence/LandingView.vue') },
+  { path: '/weather-intelligence/flash-flood',       name: 'wi-flash-flood', component: () => import('@/features/weather-intelligence/FlashFloodView.vue') },
+  { path: '/weather-intelligence/seismic-precursor', name: 'wi-seismic',     component: () => import('@/features/weather-intelligence/SeismicPrecursorView.vue') },
+  { path: '/weather-intelligence/parametric',        name: 'wi-parametric',  component: () => import('@/features/weather-intelligence/ParametricView.vue') },
+  { path: '/weather-intelligence/underwriting',      name: 'wi-underwriting',component: () => import('@/features/weather-intelligence/UnderwritingView.vue') },
+  { path: '/weather-intelligence/claims',            name: 'wi-claims',      component: () => import('@/features/weather-intelligence/ClaimsView.vue') },
+  { path: '/weather-intelligence/glossary',          name: 'wi-glossary',    component: () => import('@/features/weather-intelligence/GlossaryView.vue') },
+
   // Phase 9.8 — admin signup is OUTSIDE the gated /admin/* layout because
   // a non-admin user must be able to reach it (that's the whole point).
   { path: '/admin/sign-up',  name: 'admin-sign-up',  component: () => import('@/features/admin/AdminSignUpView.vue') },

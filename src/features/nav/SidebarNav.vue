@@ -55,7 +55,8 @@ const sections = computed<NavSection[]>(() => {
     {
       label: 'Verticals',
       items: [
-        { to: '/insurance', icon: 'shield', label: 'Insurance' },
+        { to: '/insurance',            icon: 'shield',  label: 'Insurance' },
+        { to: '/weather-intelligence', icon: 'compass', label: 'Weather Intelligence' },
       ],
     },
     {
