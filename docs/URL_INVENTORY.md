@@ -105,6 +105,8 @@ All children of `/admin` mount inside `AdminLayout.vue` which enforces both auth
 | `/admin/console/apis` | `ApisTab.vue` | 9.16 | Embeds `AdminApiKeysView` + adds 7-day request volume + 24h endpoint health. |
 | `/admin/console/monitor` | `MonitoringTab.vue` | 9.16 | Embeds `AdminHealthView` + adds `pg_cron` job status table. |
 | `/admin/console/impact` | `InsuranceImpactTab.vue` | 9.16 | The sensor → climate signal → underwriting decision bridge. Five sections, one per insurance surface. |
+| `/admin/linkedin` | `AdminLinkedinListView.vue` | 9.17 | LinkedIn drafts queue: generate, review, approve, copy. Topics from `docs/LINKEDIN_FEED.md`. |
+| `/admin/linkedin/:id` | `AdminLinkedinEditView.vue` | 9.17 | Edit a single draft: content, hashtags, scheduled time, approve/reject, copy-to-clipboard. |
 
 ---
 
@@ -121,6 +123,7 @@ Deployed by `.github/workflows/deploy-edge-functions.yml` on push to main or the
 | `ask-terra` | Supabase user JWT | Q&A endpoint backing `/ask`. | 9.5 |
 | `ask-terra-chat` | Supabase user JWT | Chat session backing `/ask`. | 9.5 |
 | `generate-blog` | Supabase user JWT + server-side `is_admin()` check | Admin-only AI blog draft generation. 5/day quota. | 9.9 |
+| `generate-linkedin-post` | Admin JWT OR `x-ingest-secret` for cron | Reads `docs/LINKEDIN_FEED.md`, picks next topic by sha256, drafts a LinkedIn post via Claude, writes a row to `public.linkedin_posts`. 5/day per admin (skipped on cron path). | 9.17 |
 | `policies-upload` | Supabase user JWT + server-side `tenant_members` check | Bulk CSV ingest for the authed tenant. ≤50k rows/request, 500-row chunks. | 9.14 |
 
 ### Bearer API-key authed (NOT a Supabase JWT)

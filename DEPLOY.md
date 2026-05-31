@@ -122,7 +122,7 @@ Default templates work fine for beta; revisit with branded HTML when shipping pu
 
 ### Anthropic-backed edge functions
 
-Three functions share the `ANTHROPIC_API_KEY` secret:
+Four functions share the `ANTHROPIC_API_KEY` secret:
 
 - `supabase/functions/ask-terra/` — trip-verdict explainer (Phase 7).
   Daily quota controlled by `ASK_TERRA_DAILY_LIMIT` (default 5).
@@ -134,6 +134,13 @@ Three functions share the `ANTHROPIC_API_KEY` secret:
   four platform-tailored variants per call (App / LinkedIn / Reddit /
   Instagram). Daily quota per admin via `GENERATE_BLOG_DAILY_LIMIT`
   (default 5).
+- `supabase/functions/generate-linkedin-post/` — Phase 9.17 LinkedIn
+  auto-poster generator. Reads `docs/LINKEDIN_FEED.md` from GitHub
+  raw, picks the oldest unprocessed topic by sha256, drafts a polished
+  post via Claude, writes a row to `public.linkedin_posts`. Two call
+  paths: admin JWT (from /admin/linkedin) and `x-ingest-secret` for
+  cron. Daily quota per admin via `LINKEDIN_GEN_DAILY_LIMIT`
+  (default 5; skipped on cron path).
 
 ```bash
 supabase secrets set ANTHROPIC_API_KEY=sk-ant-...
@@ -141,7 +148,29 @@ supabase secrets set ANTHROPIC_API_KEY=sk-ant-...
 supabase secrets set ASK_TERRA_DAILY_LIMIT=10
 supabase secrets set TERRA_CHAT_DAILY_LIMIT=20
 supabase secrets set GENERATE_BLOG_DAILY_LIMIT=10
+supabase secrets set LINKEDIN_GEN_DAILY_LIMIT=10
+# Optional override (defaults to main branch raw URL):
+supabase secrets set LINKEDIN_FEED_URL=https://raw.githubusercontent.com/<org>/<repo>/main/docs/LINKEDIN_FEED.md
 ```
+
+### LinkedIn auto-poster (Phase 9.17 — generate + review only)
+
+The /admin/linkedin dashboard surfaces every generated draft. Topics
+are maintained in `docs/LINKEDIN_FEED.md` — a markdown doc with one
+bullet per topic under a `## Topics` heading. The generator picks the
+oldest topic whose sha256 hash isn't in `public.linkedin_posts` yet.
+
+**To trigger a draft manually:** visit `/admin/linkedin` → click
+"+ Generate from next topic". The draft appears in the list with
+status `draft`. Click the row → edit content + hashtags → click
+Approve → click "Copy to clipboard" → paste into LinkedIn manually.
+
+**Phase 9.17.1** (queued, not yet shipped) will add OAuth + auto-publish.
+Until then, "approved" status is just an editorial flag — nothing
+auto-posts.
+
+Migration `0036_linkedin_posts.sql` adds `linkedin_posts` +
+`linkedin_generator_usage` tables. Both admin-only RLS.
 
 The chat function relies on migration `0017_terra_chat.sql` for the
 `terra_conversations` / `terra_messages` / `terra_chat_usage` tables.
