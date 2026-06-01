@@ -194,14 +194,56 @@ supabase secrets set LINKEDIN_CLIENT_SECRET=<your-app-secret>
 authorize URL:
 
 ```bash
-# In your hosting provider's env vars (Cloudflare Pages / Vercel),
-# add this and rebuild:
+# Cloudflare Pages / Workers env vars (PRODUCTION). Add this, then
+# trigger a rebuild — Vite inlines VITE_* vars at build time, not
+# runtime, so they must be set before the build runs:
 VITE_LINKEDIN_CLIENT_ID=<your-app-id>
 ```
 
-The client ID is meant to be public (OAuth convention — redirect-URI
-whitelist on the LinkedIn side is the security boundary). The
-secret stays server-side only.
+#### Cloudflare Pages — build-time env vars (why the front-end needs its OWN copy)
+
+`VITE_*` variables are **baked into the JavaScript bundle at build
+time**. They are NOT loaded at runtime. The flow is:
+
+```
+git push → Cloudflare Pages build container starts →
+  Cloudflare reads env vars from Pages Settings →
+  Vite sees VITE_LINKEDIN_CLIENT_ID and inlines the literal
+  string into the bundle → bundle uploads →
+  users get the bundle WITH the client ID baked in.
+```
+
+This is why **two separate secrets are required** for LinkedIn —
+one server-side, one build-time:
+
+| Secret | Where it lives | When it's used | Why it's needed |
+| --- | --- | --- | --- |
+| `LINKEDIN_CLIENT_SECRET` | Supabase Edge Function secrets | Server-side, at request time, by `linkedin-oauth-callback` + `publish-linkedin-post` | Token exchange + refresh. Never exposed to the browser. |
+| `VITE_LINKEDIN_CLIENT_ID` | Cloudflare Pages env vars | Build time, inlined into the JS bundle | The browser needs to construct the LinkedIn authorize URL; the client_id is public by OAuth convention but must be present in the bundle. |
+
+**Cloudflare Pages exact path**:
+
+1. Cloudflare Dashboard → Workers & Pages → DataSnake project
+   → **Settings** tab → **Environment Variables**.
+2. Under **Production**, click **Add variable**.
+3. Name: `VITE_LINKEDIN_CLIENT_ID`. Value: `<your-app-id>` (the
+   short string from LinkedIn → Auth tab → "Client ID", e.g.
+   `78rncx78p94xxa`).
+4. Save.
+5. **Critical**: Cloudflare does NOT auto-rebuild after env-var
+   changes. Trigger a redeploy: **Deployments** tab → latest
+   deployment → **⋯** → **Retry deployment**, OR push any trivial
+   commit to the tracked branch.
+6. Verify: open the deployed site in DevTools → Sources →
+   search the JS bundle for the literal client_id string. If you
+   can find it in the bundle, the build picked it up. If not,
+   the env var wasn't set when the build ran — re-check Pages
+   settings + retry deployment.
+
+The client_id is meant to be public (OAuth convention — the
+redirect-URI whitelist on the LinkedIn side is the actual
+security boundary). The secret stays server-side only, in
+Supabase, where the browser can never see it.
 
 **Set the function URLs in Vault** (so pg_cron can POST to them):
 
