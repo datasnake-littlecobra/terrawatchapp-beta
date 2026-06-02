@@ -563,6 +563,8 @@ select vault.create_secret('https://<ref>.supabase.co/functions/v1/ingest-nhc', 
 select vault.create_secret('https://<ref>.supabase.co/functions/v1/ingest-openaq',      'ingest_openaq_url');
 -- Phase 9.6 — NOAA NDBC ocean buoys (time-series → measurements table).
 select vault.create_secret('https://<ref>.supabase.co/functions/v1/ingest-ndbc',        'ingest_ndbc_url');
+-- Phase 9.18.1 — NOAA NWS METAR observations for /weather-intelligence/flash-flood.
+select vault.create_secret('https://<ref>.supabase.co/functions/v1/ingest-noaa-nws-obs','ingest_noaa_nws_obs_url');
 ```
 
 **OpenAQ v3 requires an API key** — recent breaking change in Q1 2026; the

@@ -89,6 +89,13 @@ jobs:
       - name: Deploy ingest-ndbc
         run: supabase functions deploy ingest-ndbc --no-verify-jwt=true
 
+      # Phase 9.18.1 — NOAA NWS observations ingester for the
+      # /weather-intelligence/flash-flood EP-curve page. Hourly cron
+      # scheduled at minute :22. Same x-ingest-secret auth as the
+      # other Phase 9.0.1 ingesters.
+      - name: Deploy ingest-noaa-nws-obs
+        run: supabase functions deploy ingest-noaa-nws-obs --no-verify-jwt=true
+
       # Phase 9.12 — one-shot FEMA NRI bulk loader. Triggered manually via
       # the seed-fema-nri workflow (workflow_dispatch). Same INGEST_SECRET
       # gate as the other ingesters; no Supabase JWT required.

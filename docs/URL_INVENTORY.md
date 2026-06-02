@@ -170,6 +170,7 @@ All ten ingesters check the shared `x-ingest-secret` header against the `INGEST_
 | `ingest-nhc` | NOAA NHC tropical | 30 min |
 | `ingest-openaq` | OpenAQ air-quality | 30 min |
 | `ingest-ndbc` | NOAA NDBC buoy obs | 1 h (`:18`) |
+| `ingest-noaa-nws-obs` | NOAA NWS METAR observations (precip, temp, humidity, wind, pressure) | 1 h (`:22`) — Phase 9.18.1 |
 
 ### Anonymous
 
