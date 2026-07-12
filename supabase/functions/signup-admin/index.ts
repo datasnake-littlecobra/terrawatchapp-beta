@@ -53,6 +53,7 @@ function json(body: unknown, status = 200): Response {
 }
 
 serve(async (req) => {
+  console.log(`[signup-admin] ${req.method} ${req.url}`)
   if (req.method === 'OPTIONS') {
     return new Response(null, { status: 204, headers: CORS_HEADERS })
   }
@@ -60,18 +61,22 @@ serve(async (req) => {
     return json({ error: 'Method not allowed' }, 405)
   }
   if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) {
+    console.error('[signup-admin] missing env: SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY')
     return json({ error: 'Server misconfigured' }, 500)
   }
 
   let body: SignupBody
   try {
     body = await req.json() as SignupBody
-  } catch {
+  } catch (e) {
+    console.error('[signup-admin] invalid JSON body:', e)
     return json({ error: 'Invalid JSON body' }, 400)
   }
   const email    = (body.email    ?? '').trim().toLowerCase()
   const password = (body.password ?? '')
   const code     = (body.code     ?? '').trim()
+
+  console.log(`[signup-admin] attempt email=${email} pw_len=${password.length} code_present=${code.length > 0}`)
 
   if (!email || !email.includes('@')) return json({ error: 'Valid email required.' }, 400)
   if (password.length < 8)             return json({ error: 'Password must be at least 8 characters.' }, 400)
@@ -88,9 +93,11 @@ serve(async (req) => {
     submitted_code: code,
   })
   if (codeErr) {
-    return json({ error: 'Code validation failed' }, 500)
+    console.error('[signup-admin] check_admin_signup_code RPC failed:', codeErr)
+    return json({ error: `Code validation failed: ${codeErr.message}` }, 500)
   }
   if (codeOk !== true) {
+    console.log('[signup-admin] code rejected')
     return json({ error: 'Invalid admin signup code.' }, 403)
   }
 
@@ -102,10 +109,12 @@ serve(async (req) => {
   })
   if (createErr || !created.user) {
     const message = createErr?.message ?? 'Sign-up failed'
+    console.error('[signup-admin] createUser failed:', createErr)
     // Most common: email already exists. Surface the upstream message
     // verbatim — Supabase's wording is already user-friendly.
     return json({ error: message }, 400)
   }
+  console.log(`[signup-admin] created user_id=${created.user.id}`)
 
   const userId = created.user.id
 

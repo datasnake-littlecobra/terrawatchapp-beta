@@ -89,6 +89,13 @@ jobs:
       - name: Deploy ingest-ndbc
         run: supabase functions deploy ingest-ndbc --no-verify-jwt=true
 
+      # Phase 9.18.1 — NOAA NWS observations ingester for the
+      # /weather-intelligence/flash-flood EP-curve page. Hourly cron
+      # scheduled at minute :22. Same x-ingest-secret auth as the
+      # other Phase 9.0.1 ingesters.
+      - name: Deploy ingest-noaa-nws-obs
+        run: supabase functions deploy ingest-noaa-nws-obs --no-verify-jwt=true
+
       # Phase 9.12 — one-shot FEMA NRI bulk loader. Triggered manually via
       # the seed-fema-nri workflow (workflow_dispatch). Same INGEST_SECRET
       # gate as the other ingesters; no Supabase JWT required.
@@ -114,3 +121,26 @@ jobs:
       # never blocks new-tenant signups.
       - name: Deploy signup-tenant
         run: supabase functions deploy signup-tenant --no-verify-jwt=true
+
+      # Phase 9.17 — LinkedIn post generator. Two callers: admin via JWT,
+      # and pg_cron via x-ingest-secret. Skip Supabase JWT verify at the
+      # gateway since the cron path has no user JWT to verify.
+      - name: Deploy generate-linkedin-post
+        run: supabase functions deploy generate-linkedin-post --no-verify-jwt=true
+
+      # Phase 9.17.1 — LinkedIn OAuth code exchange. Admin-JWT path
+      # only; not callable by cron.
+      - name: Deploy linkedin-oauth-callback
+        run: supabase functions deploy linkedin-oauth-callback --no-verify-jwt=true
+
+      # Phase 9.17.1 — LinkedIn publish. Two callers: admin via JWT
+      # for "Publish now" button, pg_cron via x-ingest-secret for the
+      # Mon/Wed/Fri 14:00 UTC schedule.
+      - name: Deploy publish-linkedin-post
+        run: supabase functions deploy publish-linkedin-post --no-verify-jwt=true
+
+      # Phase 9.18.2 — NASA FIRMS VIIRS active fire ingester. Hourly cron
+      # at :38 via x-ingest-secret. Exits early if FIRMS_MAP_KEY secret
+      # is not yet configured (graceful degradation before key registration).
+      - name: Deploy ingest-firms
+        run: supabase functions deploy ingest-firms --no-verify-jwt=true

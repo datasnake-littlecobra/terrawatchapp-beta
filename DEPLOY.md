@@ -122,7 +122,7 @@ Default templates work fine for beta; revisit with branded HTML when shipping pu
 
 ### Anthropic-backed edge functions
 
-Three functions share the `ANTHROPIC_API_KEY` secret:
+Four functions share the `ANTHROPIC_API_KEY` secret:
 
 - `supabase/functions/ask-terra/` — trip-verdict explainer (Phase 7).
   Daily quota controlled by `ASK_TERRA_DAILY_LIMIT` (default 5).
@@ -134,6 +134,13 @@ Three functions share the `ANTHROPIC_API_KEY` secret:
   four platform-tailored variants per call (App / LinkedIn / Reddit /
   Instagram). Daily quota per admin via `GENERATE_BLOG_DAILY_LIMIT`
   (default 5).
+- `supabase/functions/generate-linkedin-post/` — Phase 9.17 LinkedIn
+  auto-poster generator. Reads `docs/LINKEDIN_FEED.md` from GitHub
+  raw, picks the oldest unprocessed topic by sha256, drafts a polished
+  post via Claude, writes a row to `public.linkedin_posts`. Two call
+  paths: admin JWT (from /admin/linkedin) and `x-ingest-secret` for
+  cron. Daily quota per admin via `LINKEDIN_GEN_DAILY_LIMIT`
+  (default 5; skipped on cron path).
 
 ```bash
 supabase secrets set ANTHROPIC_API_KEY=sk-ant-...
@@ -141,7 +148,203 @@ supabase secrets set ANTHROPIC_API_KEY=sk-ant-...
 supabase secrets set ASK_TERRA_DAILY_LIMIT=10
 supabase secrets set TERRA_CHAT_DAILY_LIMIT=20
 supabase secrets set GENERATE_BLOG_DAILY_LIMIT=10
+supabase secrets set LINKEDIN_GEN_DAILY_LIMIT=10
+# Optional override (defaults to main branch raw URL):
+supabase secrets set LINKEDIN_FEED_URL=https://raw.githubusercontent.com/<org>/<repo>/main/docs/LINKEDIN_FEED.md
 ```
+
+### LinkedIn auto-poster (Phase 9.17 — generate + review only)
+
+The /admin/linkedin dashboard surfaces every generated draft. Topics
+are maintained in `docs/LINKEDIN_FEED.md` — a markdown doc with one
+bullet per topic under a `## Topics` heading. The generator picks the
+oldest topic whose sha256 hash isn't in `public.linkedin_posts` yet.
+
+**To trigger a draft manually:** visit `/admin/linkedin` → click
+"+ Generate from next topic". The draft appears in the list with
+status `draft`. Click the row → edit content + hashtags → click
+Approve → click "Copy to clipboard" → paste into LinkedIn manually.
+
+### LinkedIn auto-publish (Phase 9.17.1 — OAuth + cron)
+
+When this runs, approved drafts get posted to the DataSnake company
+page automatically on the Mon/Wed/Fri 14:00 UTC cron, OR immediately
+via the "Publish now" button next to each approved draft.
+
+**One-time LinkedIn Developer Console setup**:
+
+1. Open https://www.linkedin.com/developers/apps → DataSnake app.
+2. **Auth** tab → "Authorized redirect URLs for your app" → add:
+   `https://hyperlocalwatch.com/admin/linkedin/oauth-callback`
+3. **Products** tab → request **Community Management API**
+   (self-serve, instant approval). This unlocks
+   `w_organization_social` + `r_organization_admin` scopes.
+4. **Auth** tab → copy Client ID + Client Secret.
+
+**Set the secrets** (server-side — never in the repo):
+
+```bash
+# Supabase Edge Function secrets — used by linkedin-oauth-callback
+# + publish-linkedin-post.
+supabase secrets set LINKEDIN_CLIENT_ID=<your-app-id>
+supabase secrets set LINKEDIN_CLIENT_SECRET=<your-app-secret>
+```
+
+**Set the build-time client ID** so the Vue app can construct the
+authorize URL:
+
+```bash
+# Cloudflare Pages / Workers env vars (PRODUCTION). Add this, then
+# trigger a rebuild — Vite inlines VITE_* vars at build time, not
+# runtime, so they must be set before the build runs:
+VITE_LINKEDIN_CLIENT_ID=<your-app-id>
+```
+
+#### Cloudflare Pages — build-time env vars (why the front-end needs its OWN copy)
+
+`VITE_*` variables are **baked into the JavaScript bundle at build
+time**. They are NOT loaded at runtime. The flow is:
+
+```
+git push → Cloudflare Pages build container starts →
+  Cloudflare reads env vars from Pages Settings →
+  Vite sees VITE_LINKEDIN_CLIENT_ID and inlines the literal
+  string into the bundle → bundle uploads →
+  users get the bundle WITH the client ID baked in.
+```
+
+This is why **two separate secrets are required** for LinkedIn —
+one server-side, one build-time:
+
+| Secret | Where it lives | When it's used | Why it's needed |
+| --- | --- | --- | --- |
+| `LINKEDIN_CLIENT_SECRET` | Supabase Edge Function secrets | Server-side, at request time, by `linkedin-oauth-callback` + `publish-linkedin-post` | Token exchange + refresh. Never exposed to the browser. |
+| `VITE_LINKEDIN_CLIENT_ID` | Cloudflare Pages env vars | Build time, inlined into the JS bundle | The browser needs to construct the LinkedIn authorize URL; the client_id is public by OAuth convention but must be present in the bundle. |
+
+**Cloudflare Pages exact path**:
+
+1. Cloudflare Dashboard → Workers & Pages → DataSnake project
+   → **Settings** tab → **Environment Variables**.
+2. Under **Production**, click **Add variable**.
+3. Name: `VITE_LINKEDIN_CLIENT_ID`. Value: `<your-app-id>` (the
+   short string from LinkedIn → Auth tab → "Client ID", e.g.
+   `78rncx78p94xxa`).
+4. Save.
+5. **Critical**: Cloudflare does NOT auto-rebuild after env-var
+   changes. Trigger a redeploy: **Deployments** tab → latest
+   deployment → **⋯** → **Retry deployment**, OR push any trivial
+   commit to the tracked branch.
+6. Verify: open the deployed site in DevTools → Sources →
+   search the JS bundle for the literal client_id string. If you
+   can find it in the bundle, the build picked it up. If not,
+   the env var wasn't set when the build ran — re-check Pages
+   settings + retry deployment.
+
+The client_id is meant to be public (OAuth convention — the
+redirect-URI whitelist on the LinkedIn side is the actual
+security boundary). The secret stays server-side only, in
+Supabase, where the browser can never see it.
+
+**Set the function URLs in Vault** (so pg_cron can POST to them):
+
+```sql
+-- Run once in Supabase SQL Editor, replacing <ref> with your project ref.
+select vault.create_secret(
+  'https://<ref>.supabase.co/functions/v1/generate-linkedin-post',
+  'generate_linkedin_post_url'
+);
+select vault.create_secret(
+  'https://<ref>.supabase.co/functions/v1/publish-linkedin-post',
+  'publish_linkedin_post_url'
+);
+```
+
+**Connect the page**:
+
+1. Visit `/admin/linkedin/connect`.
+2. Click "Connect DataSnake LinkedIn" → LinkedIn consent screen.
+3. After consent you're redirected back, tokens are exchanged
+   server-side and stored in `public.linkedin_oauth`.
+4. The status page should now show "✓ Connected — DataSnake".
+
+**Verify**:
+
+- Approve a draft in `/admin/linkedin`.
+- Click "publish now" next to it → check the LinkedIn page for the post.
+- Confirm the row in `public.linkedin_posts` now has `status='published'`
+  + `linkedin_urn` populated.
+
+**Cron schedules** (migration 0038):
+
+- `linkedin-generate-mwf` — Mon/Wed/Fri 09:00 UTC — drafts next topic.
+- `linkedin-publish-mwf`  — Mon/Wed/Fri 14:00 UTC — publishes oldest approved.
+
+5-hour gap is the human review window. Adjust cron expressions in
+`0038_linkedin_cron.sql` if you want different cadences.
+
+Migration `0036_linkedin_posts.sql` adds `linkedin_posts` +
+`linkedin_generator_usage` tables. Both admin-only RLS.
+
+### Weather Intelligence Map — NASA FIRMS (Phase 9.18.2)
+
+The `/weather-intelligence/map` page shows FEMA flood zones immediately
+(WMS raster tiles, no key needed). The NASA FIRMS fire detection layer
+requires a free API key.
+
+**Step 1 — Get a free NASA Earthdata MAP_KEY** (~5 min):
+
+1. Go to <https://earthdata.nasa.gov/> → **Sign In** → **Create account**.
+2. After login, go to **My Profile** → **Application Keys** →
+   **Generate Key** (type: `FIRMS`).
+3. Copy the key — it looks like a 32-char hex string.
+
+**Step 2 — Add the key as a Supabase Edge Function secret**:
+
+```bash
+supabase secrets set FIRMS_MAP_KEY=<your-key>
+```
+
+Or in Supabase Dashboard → Edge Functions → `ingest-firms` → Secrets.
+
+**Step 3 — Register the Vault URL for pg_cron** (run once in SQL Editor):
+
+```sql
+select vault.create_secret(
+  'https://<ref>.supabase.co/functions/v1/ingest-firms',
+  'ingest_firms_url'
+);
+```
+
+**Step 4 — Trigger the first ingest manually** to populate the map
+without waiting for the next `:38` cron tick:
+
+```bash
+curl -X POST https://<ref>.supabase.co/functions/v1/ingest-firms \
+  -H "x-ingest-secret: <INGEST_SECRET>"
+```
+
+Expected response: `{"ok":true,"upserted":N,"deleted":0}` where N is
+the number of nominal+high confidence fire detections globally in the
+last 24 hours (typically 1,000–5,000).
+
+**Verification**:
+
+```sql
+select count(*), min(acq_datetime), max(acq_datetime)
+from public.firms_active_fires;
+```
+
+Should show rows with `acq_datetime` within the last 24h. Then visit
+`/weather-intelligence/map` and toggle the "Fire Detections" chip —
+orange/red circles should appear over active fire regions.
+
+**If FIRMS_MAP_KEY is not yet set**, the function returns
+`{"ok":true,"skipped":true}` and the map shows an amber banner
+("Fire detection layer inactive — FIRMS_MAP_KEY not yet configured")
+with a link to register.
+
+**Cron schedule**: migration `0043_firms_cron.sql` schedules
+`ingest-firms-hourly` at `:38` every hour via `trigger_ingest_url('ingest_firms_url')`.
 
 The chat function relies on migration `0017_terra_chat.sql` for the
 `terra_conversations` / `terra_messages` / `terra_chat_usage` tables.
@@ -421,6 +624,8 @@ select vault.create_secret('https://<ref>.supabase.co/functions/v1/ingest-nhc', 
 select vault.create_secret('https://<ref>.supabase.co/functions/v1/ingest-openaq',      'ingest_openaq_url');
 -- Phase 9.6 — NOAA NDBC ocean buoys (time-series → measurements table).
 select vault.create_secret('https://<ref>.supabase.co/functions/v1/ingest-ndbc',        'ingest_ndbc_url');
+-- Phase 9.18.1 — NOAA NWS METAR observations for /weather-intelligence/flash-flood.
+select vault.create_secret('https://<ref>.supabase.co/functions/v1/ingest-noaa-nws-obs','ingest_noaa_nws_obs_url');
 ```
 
 **OpenAQ v3 requires an API key** — recent breaking change in Q1 2026; the

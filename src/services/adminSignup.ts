@@ -34,9 +34,18 @@ export async function signupAdmin(req: AdminSignupRequest): Promise<AdminSignupR
     body: req,
   })
   if (error) {
-    const ctx = error.context as { status?: number; error?: { message?: string } } | undefined
-    const status = ctx?.status ?? 500
-    const message = ctx?.error?.message ?? error.message ?? 'Sign-up failed'
+    // supabase-js wraps the underlying HTTP response in error.context as a
+    // Response object. Read its body for the real message.
+    let status = 500
+    let message = error.message || 'Sign-up failed'
+    try {
+      const ctx = (error as { context?: Response }).context
+      if (ctx && typeof ctx.json === 'function') {
+        status = ctx.status ?? 500
+        const body = await ctx.clone().json()
+        if (body?.error) message = body.error
+      }
+    } catch { /* keep generic */ }
     throw new AdminSignupError(message, status)
   }
   if (!data) throw new AdminSignupError('No response from server.', 500)

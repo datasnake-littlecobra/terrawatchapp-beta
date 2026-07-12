@@ -63,6 +63,24 @@ Everything below is reachable without a sign-in. Linkable from marketing.
 | `/insurance/api` | `ApiDocsView.vue` | 9.13 | Public Risk API docs (curl/node/python tabs). |
 | `/insurance/pipeline` | `PipelineShowcaseView.vue` | 9.13.2 | Raw sensor → transform → business narrative. |
 
+### Weather Intelligence section — Phase 9.18
+
+Public-facing technical-due-diligence section. Sibling of `/insurance`,
+different audience (insurance buyers in technical evaluation). Every
+chart-bearing page ships with the `SqlInterpretationPanel` exposing
+the literal SQL query that produced its data — the visible
+differentiator from First Street + Zesty AI.
+
+| Route | View | Phase | Notes |
+| --- | --- | --- | --- |
+| `/weather-intelligence` | `LandingView.vue` | 9.18.0 | Thesis + 5 use-case cards + competitor matrix. |
+| `/weather-intelligence/flash-flood` | `FlashFloodView.vue` | 9.18.0 (foundation), 9.18.1 (real chart) | Miami Beach May 2024 replay. |
+| `/weather-intelligence/seismic-precursor` | `SeismicPrecursorView.vue` | 9.18.0, 9.18.5 (RPC + chart) | Bay Area foreshock clustering on USGS catalog. |
+| `/weather-intelligence/parametric` | `ParametricView.vue` | 9.18.0, 9.18.3 (interactive back-test) | Pick sensor + threshold + payout, simulate against history. |
+| `/weather-intelligence/underwriting` | `UnderwritingView.vue` | 9.18.0 | Static FEMA NRI vs FEMA + live modifiers. |
+| `/weather-intelligence/claims` | `ClaimsView.vue` | 9.18.0, 9.18.4 (IBTrACS + verdict UI) | Hurricane Ian replay → 2hr verdict. |
+| `/weather-intelligence/glossary` | `GlossaryView.vue` | 9.18.0 | Every explainer in the section, fully expanded, searchable. |
+
 ---
 
 ## Auth-only — signed-in user required, but NOT admin
@@ -105,6 +123,10 @@ All children of `/admin` mount inside `AdminLayout.vue` which enforces both auth
 | `/admin/console/apis` | `ApisTab.vue` | 9.16 | Embeds `AdminApiKeysView` + adds 7-day request volume + 24h endpoint health. |
 | `/admin/console/monitor` | `MonitoringTab.vue` | 9.16 | Embeds `AdminHealthView` + adds `pg_cron` job status table. |
 | `/admin/console/impact` | `InsuranceImpactTab.vue` | 9.16 | The sensor → climate signal → underwriting decision bridge. Five sections, one per insurance surface. |
+| `/admin/linkedin` | `AdminLinkedinListView.vue` | 9.17 | LinkedIn drafts queue: generate, review, approve, copy. Topics from `docs/LINKEDIN_FEED.md`. |
+| `/admin/linkedin/:id` | `AdminLinkedinEditView.vue` | 9.17 | Edit a single draft: content, hashtags, scheduled time, approve/reject, copy-to-clipboard. |
+| `/admin/linkedin/connect` | `AdminLinkedinConnectView.vue` | 9.17.1 | LinkedIn OAuth status + Connect button. Shows access/refresh token expiry. |
+| `/admin/linkedin/oauth-callback` | `AdminLinkedinCallbackView.vue` | 9.17.1 | OAuth redirect target — exchanges the LinkedIn auth code for tokens. |
 
 ---
 
@@ -121,6 +143,9 @@ Deployed by `.github/workflows/deploy-edge-functions.yml` on push to main or the
 | `ask-terra` | Supabase user JWT | Q&A endpoint backing `/ask`. | 9.5 |
 | `ask-terra-chat` | Supabase user JWT | Chat session backing `/ask`. | 9.5 |
 | `generate-blog` | Supabase user JWT + server-side `is_admin()` check | Admin-only AI blog draft generation. 5/day quota. | 9.9 |
+| `generate-linkedin-post` | Admin JWT OR `x-ingest-secret` for cron | Reads `docs/LINKEDIN_FEED.md`, picks next topic by sha256, drafts a LinkedIn post via Claude, writes a row to `public.linkedin_posts`. 5/day per admin (skipped on cron path). | 9.17 |
+| `linkedin-oauth-callback` | Admin JWT | Exchanges LinkedIn OAuth code for access + refresh tokens, looks up the DataSnake org URN via `/v2/organizationAcls`, upserts into `public.linkedin_oauth`. | 9.17.1 |
+| `publish-linkedin-post` | Admin JWT OR `x-ingest-secret` for cron | Picks the oldest `approved` post (filtered by `scheduled_for`), refreshes the access token if needed, POSTs to LinkedIn `/rest/posts`, updates `status='published'` + `linkedin_urn`. | 9.17.1 |
 | `policies-upload` | Supabase user JWT + server-side `tenant_members` check | Bulk CSV ingest for the authed tenant. ≤50k rows/request, 500-row chunks. | 9.14 |
 
 ### Bearer API-key authed (NOT a Supabase JWT)
@@ -145,6 +170,7 @@ All ten ingesters check the shared `x-ingest-secret` header against the `INGEST_
 | `ingest-nhc` | NOAA NHC tropical | 30 min |
 | `ingest-openaq` | OpenAQ air-quality | 30 min |
 | `ingest-ndbc` | NOAA NDBC buoy obs | 1 h (`:18`) |
+| `ingest-noaa-nws-obs` | NOAA NWS METAR observations (precip, temp, humidity, wind, pressure) | 1 h (`:22`) — Phase 9.18.1 |
 
 ### Anonymous
 

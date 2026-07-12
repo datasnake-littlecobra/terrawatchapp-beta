@@ -69,6 +69,18 @@ const routes: RouteRecordRaw[] = [
   // Phase 9.13.2 — Live sensor data pipeline showcase: raw → transformed → business outputs.
   { path: '/insurance/pipeline',   name: 'insurance-pipeline',   component: () => import('@/features/insurance/PipelineShowcaseView.vue') },
 
+  // Phase 9.18 — Weather Intelligence section. Sibling of /insurance,
+  // public-facing technical due-diligence layer. Every chart ships with the
+  // SqlInterpretationPanel showing the literal query that produced it.
+  { path: '/weather-intelligence',                   name: 'wi-landing',     component: () => import('@/features/weather-intelligence/LandingView.vue') },
+  { path: '/weather-intelligence/flash-flood',       name: 'wi-flash-flood', component: () => import('@/features/weather-intelligence/FlashFloodView.vue') },
+  { path: '/weather-intelligence/seismic-precursor', name: 'wi-seismic',     component: () => import('@/features/weather-intelligence/SeismicPrecursorView.vue') },
+  { path: '/weather-intelligence/parametric',        name: 'wi-parametric',  component: () => import('@/features/weather-intelligence/ParametricView.vue') },
+  { path: '/weather-intelligence/underwriting',      name: 'wi-underwriting',component: () => import('@/features/weather-intelligence/UnderwritingView.vue') },
+  { path: '/weather-intelligence/claims',            name: 'wi-claims',      component: () => import('@/features/weather-intelligence/ClaimsView.vue') },
+  { path: '/weather-intelligence/map',              name: 'wi-map',         component: () => import('@/features/weather-intelligence/MapView.vue') },
+  { path: '/weather-intelligence/glossary',          name: 'wi-glossary',    component: () => import('@/features/weather-intelligence/GlossaryView.vue') },
+
   // Phase 9.8 — admin signup is OUTSIDE the gated /admin/* layout because
   // a non-admin user must be able to reach it (that's the whole point).
   { path: '/admin/sign-up',  name: 'admin-sign-up',  component: () => import('@/features/admin/AdminSignUpView.vue') },
@@ -87,6 +99,12 @@ const routes: RouteRecordRaw[] = [
       { path: 'health',    name: 'admin-health',   component: () => import('@/features/admin/AdminHealthView.vue') },
       // Phase 9.13 — Insurance Risk API key issuance + revocation.
       { path: 'api-keys',  name: 'admin-api-keys', component: () => import('@/features/admin/AdminApiKeysView.vue') },
+      // Phase 9.17 — LinkedIn auto-poster: drafts queue + edit.
+      { path: 'linkedin',                 name: 'admin-linkedin',          component: () => import('@/features/admin/AdminLinkedinListView.vue') },
+      // Phase 9.17.1 — OAuth connect + callback (placed BEFORE :id so it doesn't collide).
+      { path: 'linkedin/connect',         name: 'admin-linkedin-connect',  component: () => import('@/features/admin/AdminLinkedinConnectView.vue') },
+      { path: 'linkedin/oauth-callback',  name: 'admin-linkedin-callback', component: () => import('@/features/admin/AdminLinkedinCallbackView.vue') },
+      { path: 'linkedin/:id',             name: 'admin-linkedin-edit',     component: () => import('@/features/admin/AdminLinkedinEditView.vue') },
       // Phase 9.16 — Operations Console: unified admin workspace.
       {
         path: 'console',

@@ -201,9 +201,18 @@ export const useAuthStore = defineStore('auth', {
         { body: { email, password, beta_code: betaCode ?? '' } },
       )
       if (error) {
-        // FunctionsHttpError carries the server's response body in context.
-        const ctx = (error as { context?: { status?: number; error?: { message?: string } } }).context
-        const msg = ctx?.error?.message ?? error.message ?? 'Sign-up failed'
+        // supabase-js wraps the underlying HTTP response in error.context as
+        // a Response object. Need to read the body to get our function's
+        // real error message — otherwise we only see the generic
+        // "Edge Function returned a non-2xx status code".
+        let msg = error.message || 'Sign-up failed'
+        try {
+          const ctx = (error as { context?: Response }).context
+          if (ctx && typeof ctx.json === 'function') {
+            const body = await ctx.clone().json()
+            if (body?.error) msg = `${body.error} (HTTP ${ctx.status})`
+          }
+        } catch { /* fall through to generic message */ }
         this.status = 'error'
         this.error = msg
         throw new Error(msg)
