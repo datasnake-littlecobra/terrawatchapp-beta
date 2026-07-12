@@ -20,6 +20,7 @@ create table if not exists public.model_registry (
 );
 
 alter table public.model_registry enable row level security;
+drop policy if exists "model_registry anon select" on public.model_registry;
 create policy "model_registry anon select"
   on public.model_registry for select to anon, authenticated using (true);
 
