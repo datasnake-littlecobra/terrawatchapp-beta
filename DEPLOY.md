@@ -285,6 +285,67 @@ select vault.create_secret(
 Migration `0036_linkedin_posts.sql` adds `linkedin_posts` +
 `linkedin_generator_usage` tables. Both admin-only RLS.
 
+### Weather Intelligence Map — NASA FIRMS (Phase 9.18.2)
+
+The `/weather-intelligence/map` page shows FEMA flood zones immediately
+(WMS raster tiles, no key needed). The NASA FIRMS fire detection layer
+requires a free API key.
+
+**Step 1 — Get a free NASA Earthdata MAP_KEY** (~5 min):
+
+1. Go to <https://earthdata.nasa.gov/> → **Sign In** → **Create account**.
+2. After login, go to **My Profile** → **Application Keys** →
+   **Generate Key** (type: `FIRMS`).
+3. Copy the key — it looks like a 32-char hex string.
+
+**Step 2 — Add the key as a Supabase Edge Function secret**:
+
+```bash
+supabase secrets set FIRMS_MAP_KEY=<your-key>
+```
+
+Or in Supabase Dashboard → Edge Functions → `ingest-firms` → Secrets.
+
+**Step 3 — Register the Vault URL for pg_cron** (run once in SQL Editor):
+
+```sql
+select vault.create_secret(
+  'https://<ref>.supabase.co/functions/v1/ingest-firms',
+  'ingest_firms_url'
+);
+```
+
+**Step 4 — Trigger the first ingest manually** to populate the map
+without waiting for the next `:38` cron tick:
+
+```bash
+curl -X POST https://<ref>.supabase.co/functions/v1/ingest-firms \
+  -H "x-ingest-secret: <INGEST_SECRET>"
+```
+
+Expected response: `{"ok":true,"upserted":N,"deleted":0}` where N is
+the number of nominal+high confidence fire detections globally in the
+last 24 hours (typically 1,000–5,000).
+
+**Verification**:
+
+```sql
+select count(*), min(acq_datetime), max(acq_datetime)
+from public.firms_active_fires;
+```
+
+Should show rows with `acq_datetime` within the last 24h. Then visit
+`/weather-intelligence/map` and toggle the "Fire Detections" chip —
+orange/red circles should appear over active fire regions.
+
+**If FIRMS_MAP_KEY is not yet set**, the function returns
+`{"ok":true,"skipped":true}` and the map shows an amber banner
+("Fire detection layer inactive — FIRMS_MAP_KEY not yet configured")
+with a link to register.
+
+**Cron schedule**: migration `0043_firms_cron.sql` schedules
+`ingest-firms-hourly` at `:38` every hour via `trigger_ingest_url('ingest_firms_url')`.
+
 The chat function relies on migration `0017_terra_chat.sql` for the
 `terra_conversations` / `terra_messages` / `terra_chat_usage` tables.
 The blog generator relies on migrations `0018_user_profiles_admin.sql`

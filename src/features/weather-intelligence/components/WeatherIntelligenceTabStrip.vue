@@ -14,6 +14,7 @@ const tabs: Tab[] = [
   { to: '/weather-intelligence/parametric',        label: 'Parametric',         short: 'Param' },
   { to: '/weather-intelligence/underwriting',      label: 'Underwriting',       short: 'UW' },
   { to: '/weather-intelligence/claims',            label: 'Claims',             short: 'Claims' },
+  { to: '/weather-intelligence/map',              label: 'Map',                short: 'Map' },
   { to: '/weather-intelligence/glossary',          label: 'Glossary',           short: 'Glossary' },
 ]
 

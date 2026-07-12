@@ -1,5 +1,6 @@
-// TerraWatch — Phase 9.18.1: service layer for /weather-intelligence
-// page data fetches.
+// TerraWatch — Phase 9.18.2: service layer for /weather-intelligence
+// page data fetches. Phase 9.18.1 added flash flood + NOAA NWS sensors;
+// Phase 9.18.2 adds NASA FIRMS active fire detection fetches.
 
 import { supabase } from './supabase'
 
@@ -71,6 +72,53 @@ interface SensorRow {
   id:       string
   name:     string
   metadata: Record<string, unknown> | null
+}
+
+// ---------------------------------------------------------------------
+// NASA FIRMS active fire detections (Phase 9.18.2)
+// ---------------------------------------------------------------------
+
+export interface FirmsDetection {
+  id:          number
+  lat:         number
+  lon:         number
+  brightness:  number | null
+  frp:         number | null
+  confidence:  'low' | 'nominal' | 'high' | null
+  satellite:   string | null
+  acqDatetime: Date
+}
+
+interface FirmsRow {
+  id:           number
+  lat:          number
+  lon:          number
+  brightness:   number | null
+  frp:          number | null
+  confidence:   string | null
+  satellite:    string | null
+  acq_datetime: string
+}
+
+export async function fetchFirmsDetections(daysBack = 3): Promise<FirmsDetection[]> {
+  if (!supabase) return []
+  const { data, error } = await supabase.rpc('firms_detections_recent', {
+    p_days: daysBack,
+  })
+  if (error) {
+    console.warn('[weatherIntelligence] firms_detections_recent:', error.message)
+    return []
+  }
+  return ((data ?? []) as FirmsRow[]).map((r) => ({
+    id:          r.id,
+    lat:         r.lat,
+    lon:         r.lon,
+    brightness:  r.brightness,
+    frp:         r.frp,
+    confidence:  (r.confidence as FirmsDetection['confidence']) ?? null,
+    satellite:   r.satellite,
+    acqDatetime: new Date(r.acq_datetime),
+  }))
 }
 
 export async function fetchNoaaNwsSensors(): Promise<NoaaNwsSensor[]> {

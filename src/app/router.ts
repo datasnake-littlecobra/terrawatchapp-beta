@@ -78,6 +78,7 @@ const routes: RouteRecordRaw[] = [
   { path: '/weather-intelligence/parametric',        name: 'wi-parametric',  component: () => import('@/features/weather-intelligence/ParametricView.vue') },
   { path: '/weather-intelligence/underwriting',      name: 'wi-underwriting',component: () => import('@/features/weather-intelligence/UnderwritingView.vue') },
   { path: '/weather-intelligence/claims',            name: 'wi-claims',      component: () => import('@/features/weather-intelligence/ClaimsView.vue') },
+  { path: '/weather-intelligence/map',              name: 'wi-map',         component: () => import('@/features/weather-intelligence/MapView.vue') },
   { path: '/weather-intelligence/glossary',          name: 'wi-glossary',    component: () => import('@/features/weather-intelligence/GlossaryView.vue') },
 
   // Phase 9.8 — admin signup is OUTSIDE the gated /admin/* layout because

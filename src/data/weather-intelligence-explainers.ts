@@ -149,6 +149,72 @@ export const WI_EXPLAINERS: Record<string, WeatherIntelligenceExplainer> = {
   },
 
   // =================================================================
+  // Map tab (Phase 9.18.2) — FEMA NFHL + NASA FIRMS + NOAA sensors
+  // =================================================================
+
+  'map.overview': {
+    id: 'map.overview',
+    title: 'Multi-layer risk map — flood zones + active fires + weather',
+    tab: 'map',
+    tabLabel: 'Map',
+    calibration: 'derived',
+    sourceLine: 'FEMA National Flood Hazard Layer WMS (free, no auth) + NASA FIRMS VIIRS NRT (free, requires NASA Earthdata MAP_KEY) + NOAA NWS METAR stations (Phase 9.18.1).',
+    formulas: [
+      { label: 'Layer stack',  expression: 'NFHL flood zones (raster WMS) + FIRMS fire detections (cached GeoJSON) + NOAA sensor markers (DOM overlay)', explanation: 'Three independent data pipelines composited on a single map. Each layer toggleable independently. The SQL panel below each layer shows the exact query that sourced the data.' },
+      { label: 'Map center',   expression: 'Miami Beach (-80.3, 25.8), zoom 6 — the UC1 replay region', explanation: 'Default viewport covers South Florida plus the Gulf Coast cities seeded in Phase 9.18.1 (KTMB, KFLL, KAPF, KTPA). Pan freely; layers load globally.' },
+    ],
+    observation: 'A single map that answers the underwriter\'s first question: "where is this property, what flood zone is it in, are there active fires nearby, and what is the weather doing right now?" Previously required three separate vendor subscriptions.',
+    risk_interpretation: 'Spatial context is the missing layer in most insurance data workflows. FEMA NRI scores are county-level. First Street is address-level but opaque. This map gives the underwriter a pixel-level flood zone + live fire + live weather view with reproducible SQL for every data point.',
+    financial_interpretation: 'Replacing three vendor map subscriptions (FEMA premium access, wildfire data feed, weather layer) with one DataSnake map that cites free public sources and shows its SQL. Cost reduction plus defensibility in regulatory review.',
+    business_decision: 'A commercial lines underwriter reviewing a large warehouse in the WUI (wildland-urban interface) opens this map, confirms it\'s in FEMA Zone X (low flood risk), sees two active FIRMS detections within 15km, checks the nearest NOAA station for wind direction, and makes a same-day decision. That workflow used to take 3-5 days of manual GIS work.',
+  },
+
+  'map.flood-zones': {
+    id: 'map.flood-zones',
+    title: 'FEMA NFHL flood zones — Special Flood Hazard Areas',
+    tab: 'map',
+    tabLabel: 'Map',
+    calibration: 'live',
+    sourceLine: 'FEMA National Flood Hazard Layer — WMS tile service at hazards.fema.gov. Free, no auth. Updated as FEMA issues revised DFIRMs (Letter of Map Revision or new study).',
+    formulas: [
+      { label: 'Zone AE',  expression: '1% annual chance flood (100-year floodplain), base flood elevations established', explanation: 'The primary regulated flood zone. Federally-backed mortgages require flood insurance in Zone AE. Most severe residential flood losses originate here.' },
+      { label: 'Zone VE',  expression: '1% annual chance coastal flood with wave action ≥ 3 ft', explanation: 'Coastal high-hazard zone. Wave impact adds structural damage on top of inundation. Premium surcharge 2-4× Zone AE for residential.' },
+      { label: 'Zone AH/AO', expression: 'Shallow flooding — AH: ponding 1-3ft; AO: sheet flow 1-3ft depth × velocity', explanation: 'Common in low-gradient coastal plains (South FL). The flash-flood EP curve captures AH/AO events that the NFHL zone boundary misses.' },
+      { label: 'Zone X',  expression: '0.2% annual chance flood (500-year floodplain) or area with annual chance < 1% but < 500-year', explanation: 'Outside the Special Flood Hazard Area. No mandatory flood insurance, but NOT zero risk. FEMA claims data show ~25% of losses occur in Zone X.' },
+    ],
+    observation: 'The NFHL is the regulatory baseline. Every property in a SFHA (Zones A, AE, AH, AO, V, VE) carrying a federally-backed mortgage is required by law to hold flood insurance. The map shows which properties are in regulatory scope.',
+    risk_interpretation: 'NFHL boundaries are based on engineering studies that are often 10-20 years old. They do not account for subsidence, sea-level rise, or local drainage changes. The EP curve (Flash Flood tab) is the live complement — it tells you P_flood right now, independent of the regulatory boundary.',
+    financial_interpretation: 'A portfolio manager with 200 policies in Zone X should NOT assume zero flood exposure. The 25% loss-in-X statistic means a significant share of flood losses paid by NFIP and private insurers come from properties outside the SFHA. DataSnake\'s live EP curve catches those events.',
+    business_decision: 'Underwriting action: for properties in Zone AE or VE, mandatory flood rider. For properties in Zone X within 500m of the AE boundary (shown by the NFHL boundary line on this map), recommended flood rider. For properties in Zone X > 1km from any AE boundary, EP curve governs.',
+  },
+
+  'map.firms-fires': {
+    id: 'map.firms-fires',
+    title: 'NASA FIRMS VIIRS — active fire detections',
+    tab: 'map',
+    tabLabel: 'Map',
+    calibration: 'live',
+    sourceLine: 'NASA FIRMS (Fire Information for Resource Management System) — VIIRS SNPP + NOAA-21 Near-Realtime, refreshed hourly. Free; requires NASA Earthdata MAP_KEY (register at earthdata.nasa.gov).',
+    formulas: [
+      { label: 'Fire Radiative Power (FRP)', expression: 'energy emitted by the fire pixel (MW), measured by VIIRS I-4 thermal channel', explanation: 'FRP is the most direct satellite measure of fire intensity. Low FRP (<10 MW) = small brush fire. High FRP (>100 MW) = active wildland fire front. Circle size on the map scales linearly with FRP.' },
+      { label: 'Confidence', expression: '"low" | "nominal" | "high" — based on I-4 brightness temperature, view angle, and background noise', explanation: 'FIRMS classifies each detection. High confidence detections are unambiguous active fires. Nominal = probable. Low = possible (elevated false-positive rate). Map colors: red=high, orange=nominal, amber=low.' },
+      { label: 'Near-Realtime latency', expression: '≤ 3 hours from satellite overpass to FIRMS API', explanation: 'VIIRS SNPP overpasses a given location ~2× per day. NOAA-21 adds another ~2×. Combined latency to map is typically 2-6 hours, better than any aerial or ground-based fire reporting.' },
+    ],
+    observation: 'Fire detections visible on this map are refreshed hourly from the NASA FIRMS NRT archive. Circle size = fire intensity (FRP in MW). Circles colored red/orange/amber by confidence. Hover for satellite, FRP, and UTC acquisition time.',
+    risk_interpretation: 'Active fire detections within 10km of a property raise short-term total loss probability by 3-8× (WUI context). Within 5km, standard underwriting practice is to stop writing new policies until the fire is contained. This map shows both active perimeter and individual hotspots.',
+    financial_interpretation: 'A reinsurer holding wildfire-exposed cat treaties in California, Oregon, and Texas can use this layer to confirm that their cedants\' exposed properties are NOT adjacent to active fire perimeters at treaty renewal. Without this map, that confirmation takes days of adjuster phone calls.',
+    business_decision: 'Claims ops: when a new loss report comes in for a wildfire-adjacent property, pull the FIRMS history for that location (the SQL panel below shows the query). If FIRMS shows high-confidence detections within 3km in the 48h before the loss, that\'s a supporting signal for the claim. If not, flag for investigation.',
+    assumptions: [
+      'FIRMS VIIRS detects active flaming combustion. Smouldering fires, smoke-obscured fires, and very small fires below the ~375m pixel threshold are not detected.',
+      'Cloud cover blocks thermal detection. During a storm-driven fire event (high wind, some cloud), the FIRMS record may undercount active hotspots.',
+    ],
+    limitations: [
+      'FIRMS is not a fire perimeter product. It shows individual ~375m detection pixels, not the continuous burned-area boundary. Use it for presence/absence of active fire, not for precise property-distance calculations.',
+      'NRT archive has a rolling 7-day window in this implementation. For historical fire dates, the FIRMS archive goes back to 2000 (MODIS) / 2012 (VIIRS) but requires bulk download.',
+    ],
+  },
+
+  // =================================================================
   // Claims (UC5) — content extends in 9.18.4
   // =================================================================
 

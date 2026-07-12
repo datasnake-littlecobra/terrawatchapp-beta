@@ -14,6 +14,7 @@ export type WeatherIntelligenceTab =
   | 'parametric'
   | 'underwriting'
   | 'claims'
+  | 'map'
 
 export interface WeatherIntelligenceExplainer {
   id:            string                       // 'flash-flood.ep-curve'
@@ -39,6 +40,7 @@ export const WI_TAB_ORDER: WeatherIntelligenceTab[] = [
   'parametric',
   'underwriting',
   'claims',
+  'map',
 ]
 
 export const WI_TAB_LABELS: Record<WeatherIntelligenceTab, string> = {
@@ -48,6 +50,7 @@ export const WI_TAB_LABELS: Record<WeatherIntelligenceTab, string> = {
   'parametric':        'Parametric',
   'underwriting':      'Underwriting',
   'claims':            'Claims',
+  'map':               'Map',
 }
 
 export const WI_TAB_ROUTES: Record<WeatherIntelligenceTab, string> = {
@@ -57,4 +60,5 @@ export const WI_TAB_ROUTES: Record<WeatherIntelligenceTab, string> = {
   'parametric':        '/weather-intelligence/parametric',
   'underwriting':      '/weather-intelligence/underwriting',
   'claims':            '/weather-intelligence/claims',
+  'map':               '/weather-intelligence/map',
 }

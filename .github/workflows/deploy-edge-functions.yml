@@ -138,3 +138,9 @@ jobs:
       # Mon/Wed/Fri 14:00 UTC schedule.
       - name: Deploy publish-linkedin-post
         run: supabase functions deploy publish-linkedin-post --no-verify-jwt=true
+
+      # Phase 9.18.2 — NASA FIRMS VIIRS active fire ingester. Hourly cron
+      # at :38 via x-ingest-secret. Exits early if FIRMS_MAP_KEY secret
+      # is not yet configured (graceful degradation before key registration).
+      - name: Deploy ingest-firms
+        run: supabase functions deploy ingest-firms --no-verify-jwt=true
