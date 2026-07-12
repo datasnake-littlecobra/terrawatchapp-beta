@@ -81,6 +81,16 @@ const routes: RouteRecordRaw[] = [
   { path: '/weather-intelligence/map',              name: 'wi-map',         component: () => import('@/features/weather-intelligence/MapView.vue') },
   { path: '/weather-intelligence/glossary',          name: 'wi-glossary',    component: () => import('@/features/weather-intelligence/GlossaryView.vue') },
 
+  // Phase 10.0 — AI/ML Intelligence section. Public-facing showcase for
+  // all 7 ranked models: training dataset, benchmark accuracy, synthetic
+  // inference results, and full input→model→output audit trail.
+  { path: '/ai-models',                    name: 'ai-hub',       component: () => import('@/features/ai-models/ModelHubView.vue') },
+  { path: '/ai-models/pipeline-detection', name: 'ai-pipeline',  component: () => import('@/features/ai-models/PipelineDetectionView.vue') },
+  { path: '/ai-models/oil-spill',          name: 'ai-oil-spill', component: () => import('@/features/ai-models/OilSpillView.vue') },
+  { path: '/ai-models/seismic-insar',      name: 'ai-seismic',   component: () => import('@/features/ai-models/SeismicInSARView.vue') },
+  { path: '/ai-models/marine-biota',       name: 'ai-biota',     component: () => import('@/features/ai-models/MarineBiotaView.vue') },
+  { path: '/ai-models/glossary',           name: 'ai-glossary',  component: () => import('@/features/ai-models/AIGlossaryView.vue') },
+
   // Phase 9.8 — admin signup is OUTSIDE the gated /admin/* layout because
   // a non-admin user must be able to reach it (that's the whole point).
   { path: '/admin/sign-up',  name: 'admin-sign-up',  component: () => import('@/features/admin/AdminSignUpView.vue') },
