@@ -73,7 +73,7 @@ onMounted(() => {
             <path d="M3 6h18M3 12h18M3 18h18" />
           </svg>
         </button>
-        <span class="flex-1 text-accent text-xs tracking-widest uppercase font-semibold">TerraWatch</span>
+        <RouterLink to="/" class="flex-1 text-accent text-xs tracking-widest uppercase font-semibold">TerraWatch</RouterLink>
         <UserChip />
       </header>
 
