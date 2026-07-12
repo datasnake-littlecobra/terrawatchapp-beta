@@ -36,6 +36,7 @@ const grouped = computed(() => {
     'parametric':        [],
     'underwriting':      [],
     'claims':            [],
+    'map':               [],
   }
   for (const e of Object.values(WI_EXPLAINERS)) {
     if (norm) {
