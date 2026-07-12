@@ -12,6 +12,8 @@ import 'maplibre-gl/dist/maplibre-gl.css'
 import AIModelTabStrip from './components/AIModelTabStrip.vue'
 import ConfidenceChart from './components/ConfidenceChart.vue'
 import InferenceLogTable from './components/InferenceLogTable.vue'
+import InferenceControls from './components/InferenceControls.vue'
+import SqlPlayground from './components/SqlPlayground.vue'
 import SqlInterpretationPanel from '@/features/weather-intelligence/components/SqlInterpretationPanel.vue'
 import Card from '@/ui/Card.vue'
 import { useMeta } from '@/composables/useMeta'
@@ -25,9 +27,55 @@ useMeta(() => ({
 
 const MODEL_SLUG = 'oil-spill'
 
-const results  = ref<InferenceResult[]>([])
-const loading  = ref(true)
-const errorMsg = ref<string | null>(null)
+const results         = ref<InferenceResult[]>([])
+const filteredResults = ref<InferenceResult[]>([])
+const loading         = ref(true)
+const errorMsg        = ref<string | null>(null)
+
+const OIL_EXAMPLES = [
+  {
+    label: 'All detections',
+    sql: `select id, detected_class, confidence, lat, lon,
+  metadata->>'area_km2' as area_km2,
+  metadata->>'satellite' as satellite,
+  inferred_at
+from public.model_inference_log
+where model_slug = 'oil-spill'
+order by inferred_at desc
+limit 20;`,
+  },
+  {
+    label: 'Oil slicks only (≥80%)',
+    sql: `select id, lat, lon, confidence,
+  (metadata->>'area_km2')::numeric as area_km2,
+  metadata->>'satellite' as satellite
+from public.model_inference_log
+where model_slug = 'oil-spill'
+  and detected_class = 'oil_slick'
+  and confidence >= 0.80
+order by (metadata->>'area_km2')::numeric desc;`,
+  },
+  {
+    label: 'Class breakdown',
+    sql: `select detected_class,
+  count(*)                            as detections,
+  round(avg(confidence)::numeric, 3)  as avg_confidence,
+  round(sum((metadata->>'area_km2')::numeric)::numeric, 2) as total_area_km2
+from public.model_inference_log
+where model_slug = 'oil-spill'
+group by detected_class
+order by total_area_km2 desc;`,
+  },
+  {
+    label: 'Look-alike vs real slick',
+    sql: `select detected_class, confidence, lat, lon,
+  metadata->>'satellite' as satellite
+from public.model_inference_log
+where model_slug = 'oil-spill'
+  and detected_class in ('oil_slick','look_alike')
+order by confidence desc;`,
+  },
+]
 
 const mapEl      = ref<HTMLDivElement | null>(null)
 const map        = shallowRef<maplibregl.Map | null>(null)
@@ -290,19 +338,37 @@ from public.model_inference_results(
         </div>
       </Card>
 
-      <!-- Confidence chart -->
+      <!-- Interactive controls -->
+      <InferenceControls
+        v-if="!loading"
+        :results="results"
+        model-slug="oil-spill"
+        input-label="Sentinel-1 SAR (C-band)"
+        @filtered="filteredResults = $event"
+      />
+
+      <!-- Confidence chart (filtered) -->
       <Card padded>
-        <h2 class="text-sm font-semibold text-ink-primary mb-3">Detection Class Confidence (latest 50)</h2>
-        <ConfidenceChart :results="results" />
+        <h2 class="text-sm font-semibold text-ink-primary mb-3">Detection Class Confidence</h2>
+        <ConfidenceChart :results="filteredResults" />
       </Card>
 
-      <!-- Inference log -->
+      <!-- Inference log (filtered) -->
       <Card padded>
         <h2 class="text-sm font-semibold text-ink-primary mb-3">Inference Log</h2>
-        <InferenceLogTable :results="results" />
+        <InferenceLogTable :results="filteredResults" />
       </Card>
 
-      <!-- SQL panel -->
+      <!-- SQL playground -->
+      <Card padded>
+        <h2 class="text-sm font-semibold text-ink-primary mb-3">SQL Explorer</h2>
+        <p class="text-xs text-ink-muted mb-3">
+          Query the raw detection data — filter by class, area, confidence, or location.
+        </p>
+        <SqlPlayground model-slug="oil-spill" :examples="OIL_EXAMPLES" />
+      </Card>
+
+      <!-- Reproducible query panel -->
       <Card padded>
         <SqlInterpretationPanel
           :query="inferenceRpcSql"
