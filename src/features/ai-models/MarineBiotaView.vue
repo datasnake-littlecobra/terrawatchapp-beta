@@ -12,6 +12,8 @@ import { GridComponent, TooltipComponent } from 'echarts/components'
 import VChart from 'vue-echarts'
 import AIModelTabStrip from './components/AIModelTabStrip.vue'
 import InferenceLogTable from './components/InferenceLogTable.vue'
+import InferenceControls from './components/InferenceControls.vue'
+import SqlPlayground from './components/SqlPlayground.vue'
 import SqlInterpretationPanel from '@/features/weather-intelligence/components/SqlInterpretationPanel.vue'
 import Card from '@/ui/Card.vue'
 import { useMeta } from '@/composables/useMeta'
@@ -27,9 +29,47 @@ useMeta(() => ({
 
 const MODEL_SLUG = 'marine-biota'
 
-const results  = ref<InferenceResult[]>([])
-const loading  = ref(true)
-const errorMsg = ref<string | null>(null)
+const results         = ref<InferenceResult[]>([])
+const filteredResults = ref<InferenceResult[]>([])
+const loading         = ref(true)
+const errorMsg        = ref<string | null>(null)
+
+const BIOTA_EXAMPLES = [
+  {
+    label: 'All detections',
+    sql: `select id, detected_class, confidence,
+  metadata->>'depth_m'   as depth_m,
+  metadata->>'rov_frame' as rov_frame,
+  inferred_at
+from public.model_inference_log
+where model_slug = 'marine-biota'
+order by inferred_at desc
+limit 20;`,
+  },
+  {
+    label: 'Top species by avg confidence',
+    sql: `select detected_class,
+  count(*) as sightings,
+  round(avg(confidence)::numeric, 3) as avg_confidence,
+  round(min((metadata->>'depth_m')::numeric)::numeric, 0) as min_depth_m,
+  round(max((metadata->>'depth_m')::numeric)::numeric, 0) as max_depth_m
+from public.model_inference_log
+where model_slug = 'marine-biota'
+group by detected_class
+order by avg_confidence desc
+limit 10;`,
+  },
+  {
+    label: 'Deep sightings (>1000m)',
+    sql: `select detected_class, confidence,
+  (metadata->>'depth_m')::numeric as depth_m,
+  metadata->>'rov_frame' as rov_frame
+from public.model_inference_log
+where model_slug = 'marine-biota'
+  and (metadata->>'depth_m')::numeric > 1000
+order by depth_m desc;`,
+  },
+]
 
 const topClass = computed(() => {
   if (!results.value.length) return null
@@ -244,14 +284,32 @@ from public.model_inference_results(
         </div>
       </Card>
 
-      <!-- Inference log -->
+      <!-- Interactive controls -->
+      <InferenceControls
+        v-if="!loading"
+        :results="results"
+        model-slug="marine-biota"
+        input-label="ROV video frame (1080p)"
+        @filtered="filteredResults = $event"
+      />
+
+      <!-- Inference log (filtered) -->
       <Card padded>
         <h2 class="text-sm font-semibold text-ink-primary mb-3">Inference Log</h2>
         <div v-if="loading" class="text-ink-muted text-sm py-4 text-center">Loading…</div>
-        <InferenceLogTable v-else :results="results" />
+        <InferenceLogTable v-else :results="filteredResults" />
       </Card>
 
-      <!-- SQL panel -->
+      <!-- SQL playground -->
+      <Card padded>
+        <h2 class="text-sm font-semibold text-ink-primary mb-3">SQL Explorer</h2>
+        <p class="text-xs text-ink-muted mb-3">
+          Query species sightings — filter by depth, confidence, or species name.
+        </p>
+        <SqlPlayground model-slug="marine-biota" :examples="BIOTA_EXAMPLES" />
+      </Card>
+
+      <!-- Reproducible query panel -->
       <Card padded>
         <SqlInterpretationPanel
           :query="inferenceRpcSql"

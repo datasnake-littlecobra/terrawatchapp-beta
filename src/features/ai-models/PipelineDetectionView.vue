@@ -9,6 +9,8 @@ import { onBeforeUnmount, onMounted, ref } from 'vue'
 import AIModelTabStrip from './components/AIModelTabStrip.vue'
 import ConfidenceChart from './components/ConfidenceChart.vue'
 import InferenceLogTable from './components/InferenceLogTable.vue'
+import InferenceControls from './components/InferenceControls.vue'
+import SqlPlayground from './components/SqlPlayground.vue'
 import SqlInterpretationPanel from '@/features/weather-intelligence/components/SqlInterpretationPanel.vue'
 import Card from '@/ui/Card.vue'
 import { useMeta } from '@/composables/useMeta'
@@ -22,9 +24,57 @@ useMeta(() => ({
 
 const MODEL_SLUG = 'pipeline-detection'
 
-const results  = ref<InferenceResult[]>([])
-const loading  = ref(true)
-const errorMsg = ref<string | null>(null)
+const results         = ref<InferenceResult[]>([])
+const filteredResults = ref<InferenceResult[]>([])
+const loading         = ref(true)
+const errorMsg        = ref<string | null>(null)
+
+const PIPELINE_EXAMPLES = [
+  {
+    label: 'All detections',
+    sql: `select id, detected_class, confidence, metadata->>'segment_id' as segment_id,
+  metadata->>'pipeline_km' as pipeline_km, inferred_at
+from public.model_inference_log
+where model_slug = 'pipeline-detection'
+order by inferred_at desc
+limit 20;`,
+  },
+  {
+    label: 'High-risk only (corroded + damaged)',
+    sql: `select id, detected_class, confidence,
+  metadata->>'segment_id' as segment_id,
+  metadata->>'depth_m' as depth_m
+from public.model_inference_log
+where model_slug = 'pipeline-detection'
+  and detected_class in ('corroded','damaged')
+  and confidence >= 0.80
+order by confidence desc;`,
+  },
+  {
+    label: 'Class breakdown',
+    sql: `select detected_class,
+  count(*)                          as count,
+  round(avg(confidence)::numeric,3) as avg_confidence,
+  round(max(confidence)::numeric,3) as max_confidence
+from public.model_inference_log
+where model_slug = 'pipeline-detection'
+group by detected_class
+order by avg_confidence desc;`,
+  },
+  {
+    label: 'Pipeline km at risk',
+    sql: `select
+  metadata->>'segment_id' as segment_id,
+  (metadata->>'pipeline_km')::numeric as pipeline_km,
+  detected_class,
+  round(confidence::numeric,3) as confidence
+from public.model_inference_log
+where model_slug  = 'pipeline-detection'
+  and detected_class != 'intact'
+order by pipeline_km desc
+limit 15;`,
+  },
+]
 
 const canvasEl = ref<HTMLCanvasElement | null>(null)
 let animFrame  = 0
@@ -244,21 +294,40 @@ from public.model_inference_results(
         </div>
       </Card>
 
-      <!-- Confidence chart -->
+      <!-- Interactive controls: input panel + filters -->
+      <InferenceControls
+        v-if="!loading"
+        :results="results"
+        model-slug="pipeline-detection"
+        input-label="Side-scan sonar (100 kHz)"
+        @filtered="filteredResults = $event"
+      />
+
+      <!-- Confidence chart (filtered) -->
       <Card padded>
-        <h2 class="text-sm font-semibold text-ink-primary mb-3">Detection Class Confidence (latest 50)</h2>
+        <h2 class="text-sm font-semibold text-ink-primary mb-3">Detection Class Confidence</h2>
         <p v-if="loading" class="text-ink-muted text-sm py-8 text-center">Loading…</p>
-        <ConfidenceChart v-else :results="results" />
+        <ConfidenceChart v-else :results="filteredResults" />
       </Card>
 
-      <!-- Inference log -->
+      <!-- Inference log (filtered) -->
       <Card padded>
         <h2 class="text-sm font-semibold text-ink-primary mb-3">Inference Log</h2>
         <p v-if="loading" class="text-ink-muted text-sm py-4 text-center">Loading…</p>
-        <InferenceLogTable v-else :results="results" />
+        <InferenceLogTable v-else :results="filteredResults" />
       </Card>
 
-      <!-- SQL panel -->
+      <!-- SQL playground -->
+      <Card padded>
+        <h2 class="text-sm font-semibold text-ink-primary mb-3">SQL Explorer</h2>
+        <p class="text-xs text-ink-muted mb-3">
+          Write any SELECT query against the inference tables — results appear below in real time.
+          Use the example buttons to load pre-built queries.
+        </p>
+        <SqlPlayground model-slug="pipeline-detection" :examples="PIPELINE_EXAMPLES" />
+      </Card>
+
+      <!-- Reproducible query panel -->
       <Card padded>
         <SqlInterpretationPanel
           :query="inferenceRpcSql"
