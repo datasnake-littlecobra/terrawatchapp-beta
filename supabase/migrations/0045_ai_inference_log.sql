@@ -30,6 +30,7 @@ create index if not exists ai_log_location_idx
   where location is not null;
 
 alter table public.model_inference_log enable row level security;
+drop policy if exists "ai_log anon select" on public.model_inference_log;
 create policy "ai_log anon select"
   on public.model_inference_log for select to anon, authenticated using (true);
 
