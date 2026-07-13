@@ -95,7 +95,8 @@ function fmtDate(d: Date): string {
 const featuredFields = computed(() => {
   const r = featured.value
   if (!r) return []
-  const bbox = r.metadata.bbox as number[] | undefined
+  // Prefer bbox_norm (normalised 0-1); fall back to normalising bbox manually
+  const bboxNorm = resolveBboxNorm(r)
   return [
     {
       key: 'source',
@@ -130,8 +131,8 @@ const featuredFields = computed(() => {
     {
       key: 'bbox',
       label: 'Bbox [x₁, y₁, x₂, y₂]',
-      value: bbox ? bbox.map(v => Number(v).toFixed(2)).join(', ') : '—',
-      note: 'Normalised pixel region where the defect was localised in the 256×256 tile (0=left/top, 1=right/bottom)',
+      value: bboxNorm ? bboxNorm.map(v => v.toFixed(3)).join(', ') : '—',
+      note: 'Normalised coordinates where the defect was localised (0 = left/top edge, 1 = right/bottom edge of the tile)',
     },
   ]
 })
@@ -168,6 +169,21 @@ function classColor(cls: string): string {
   return CLASS_COLORS[cls.toLowerCase()] ?? 'rgba(99,102,241,0.60)'
 }
 
+// Returns normalised [0,1] bbox coords, regardless of how they were stored.
+// Prefers metadata.bbox_norm (written by migration 0048 / seed script).
+// Falls back to dividing metadata.bbox by image_w / image_h (default 256×256).
+function resolveBboxNorm(r: InferenceResult): [number, number, number, number] | null {
+  const norm = r.metadata.bbox_norm as number[] | undefined
+  if (norm && norm.length >= 4) {
+    return [norm[0] ?? 0, norm[1] ?? 0, norm[2] ?? 0, norm[3] ?? 0]
+  }
+  const bbox = r.metadata.bbox as number[] | undefined
+  if (!bbox || bbox.length < 4) return null
+  const iw = (r.metadata.image_w as number | undefined) ?? 256
+  const ih = (r.metadata.image_h as number | undefined) ?? 256
+  return [(bbox[0] ?? 0) / iw, (bbox[1] ?? 0) / ih, (bbox[2] ?? 0) / iw, (bbox[3] ?? 0) / ih]
+}
+
 function noise(x: number, y: number): number {
   const n = Math.sin(x * 127.1 + y * 311.7) * 43758.5453123
   return n - Math.floor(n)
@@ -192,10 +208,9 @@ function drawSonarTexture(ctx: CanvasRenderingContext2D, W: number, H: number) {
 }
 
 function drawBbox(ctx: CanvasRenderingContext2D, W: number, H: number, r: InferenceResult) {
-  const bbox = r.metadata.bbox as number[] | undefined
-  if (!bbox || bbox.length < 4) return
-  const x1n = bbox[0] ?? 0; const y1n = bbox[1] ?? 0
-  const x2n = bbox[2] ?? 0; const y2n = bbox[3] ?? 0
+  const n = resolveBboxNorm(r)
+  if (!n) return
+  const [x1n, y1n, x2n, y2n] = n
   const x1 = x1n * W; const y1 = y1n * H
   const x2 = x2n * W; const y2 = y2n * H
   const color = classColor(r.detectedClass)
@@ -212,12 +227,21 @@ function drawBbox(ctx: CanvasRenderingContext2D, W: number, H: number, r: Infere
   ctx.fillText(label, x1 + 3, y1 - 3)
 }
 
-function drawStoryCanvas(canvas: HTMLCanvasElement, result: InferenceResult | null) {
+// skipTexture: true when a real <img> sits beneath the canvas — texture would hide it.
+function drawStoryCanvas(
+  canvas: HTMLCanvasElement,
+  result: InferenceResult | null,
+  opts: { skipTexture?: boolean } = {},
+) {
   const ctx = canvas.getContext('2d')
   if (!ctx) return
   const W = canvas.width; const H = canvas.height
 
-  drawSonarTexture(ctx, W, H)
+  if (opts.skipTexture) {
+    ctx.clearRect(0, 0, W, H)
+  } else {
+    drawSonarTexture(ctx, W, H)
+  }
 
   // 13×13 YOLO detection grid
   ctx.strokeStyle = 'rgba(99,102,241,0.18)'
@@ -230,10 +254,9 @@ function drawStoryCanvas(canvas: HTMLCanvasElement, result: InferenceResult | nu
 
   if (!result) return
 
-  const bbox = result.metadata.bbox as number[] | undefined
-  if (!bbox || bbox.length < 4) return
-  const x1n = bbox[0] ?? 0; const y1n = bbox[1] ?? 0
-  const x2n = bbox[2] ?? 0; const y2n = bbox[3] ?? 0
+  const n = resolveBboxNorm(result)
+  if (!n) return
+  const [x1n, y1n, x2n, y2n] = n
 
   // Highlight the grid cell containing the bbox centre
   const cellX = Math.min(12, Math.floor(((x1n + x2n) / 2) * 13))
@@ -272,9 +295,13 @@ function animate(canvas: HTMLCanvasElement, res: InferenceResult[]) {
   animFrame = requestAnimationFrame(frame)
 }
 
+function storyCanvasOpts(r: InferenceResult | null) {
+  return { skipTexture: typeof r?.metadata.image_url === 'string' && !!r.metadata.image_url }
+}
+
 watch(featured, async (r) => {
   await nextTick()
-  if (storyCanvasEl.value) drawStoryCanvas(storyCanvasEl.value, r)
+  if (storyCanvasEl.value) drawStoryCanvas(storyCanvasEl.value, r, storyCanvasOpts(r))
 })
 
 onMounted(async () => {
@@ -286,7 +313,7 @@ onMounted(async () => {
     loading.value = false
   }
   await nextTick()
-  if (storyCanvasEl.value) drawStoryCanvas(storyCanvasEl.value, featured.value)
+  if (storyCanvasEl.value) drawStoryCanvas(storyCanvasEl.value, featured.value, storyCanvasOpts(featured.value))
   if (fullCanvasEl.value) animate(fullCanvasEl.value, results.value)
 })
 
@@ -450,20 +477,60 @@ from public.model_inference_results(
           </StoryStep>
 
           <!-- Step 3: What the Model Sees -->
-          <StoryStep :step="3" title="What YOLOv8 sees — sonar tile with detection grid">
+          <StoryStep
+            :step="3"
+            :title="featured?.metadata.image_url ? 'What the ROV camera captured — real pipeline image' : 'What YOLOv8 sees — sonar tile with detection grid'"
+          >
             <div v-if="loading" class="h-44 bg-white/5 animate-pulse rounded-lg" />
             <template v-else-if="featured">
-              <div class="relative rounded-lg overflow-hidden border border-white/5 mb-3">
+              <!-- Real image mode: <img> beneath transparent canvas overlay -->
+              <div
+                v-if="featured.metadata.image_url"
+                class="relative rounded-lg overflow-hidden border border-white/5 mb-3"
+              >
+                <img
+                  :src="featured.metadata.image_url as string"
+                  class="w-full h-auto block"
+                  alt="ROV camera frame — pipeline defect detection"
+                />
+                <!-- Canvas sits absolutely over the image, drawing only the bbox + grid overlay -->
+                <canvas ref="storyCanvasEl" width="640" height="480" class="absolute inset-0 w-full h-full" />
+              </div>
+              <!-- Synthetic mode: canvas draws procedural sonar texture -->
+              <div
+                v-else
+                class="relative rounded-lg overflow-hidden border border-white/5 mb-3"
+              >
                 <canvas ref="storyCanvasEl" width="640" height="180" class="w-full h-auto block" />
               </div>
+
+              <!-- Source badge -->
+              <div class="flex items-center gap-2 mb-3">
+                <span
+                  v-if="featured.metadata.image_url"
+                  class="text-[10px] uppercase tracking-widest px-2 py-0.5 rounded border border-safe/30 bg-safe/[0.06] text-safe"
+                >
+                  Real image · {{ featured.metadata.dataset ?? 'Roboflow dataset' }}
+                </span>
+                <span
+                  v-else
+                  class="text-[10px] uppercase tracking-widest px-2 py-0.5 rounded border border-caution/30 bg-caution/[0.06] text-caution"
+                >
+                  Demo · synthetic sonar texture
+                </span>
+              </div>
+
               <div class="rounded-lg border border-accent/20 bg-accent/[0.04] px-3 py-2.5 text-xs text-ink-muted leading-relaxed">
                 <strong class="text-accent">YOLOv8 detection grid:</strong>
-                The model divides the 256×256 sonar tile into a <strong class="text-ink-primary">13×13 grid (169 cells)</strong>.
+                The model divides the input tile into a <strong class="text-ink-primary">13×13 grid (169 cells)</strong>.
                 For each cell it predicts: "is there a defect here, and what class?"
                 The highlighted cell fired on
                 <strong :class="classOutputColor(featured.detectedClass)">{{ featured.detectedClass }}</strong>
-                — irregular backscatter patterning characteristic of that defect type.
-                The bounding box marks the exact pixel region of the anomaly within this 256×256 tile.
+                — the bounding box marks the exact region of the anomaly.
+                <template v-if="featured.metadata.image_url">
+                  This is a real ROV camera photograph: stage 1 uses sonar to locate the pipeline;
+                  stage 2 deploys the ROV camera to assess defect condition.
+                </template>
               </div>
             </template>
           </StoryStep>
