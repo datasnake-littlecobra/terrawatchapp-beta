@@ -1,11 +1,11 @@
 <script setup lang="ts">
-// TerraWatch — Phase 9.11: shared scaffolding for the research dashboards.
+// TerraWatch — Phase 9.11: shared scaffolding for analytics dashboards.
 // Provides the page header, hero counter row, content slot, and a
-// provenance footer band. Each domain dashboard fills the slot with its
-// own charts + GapCallout.
+// provenance footer band. Originally shared across the research dashboards;
+// now used by Insurance only (Phase 11 removed the research section).
 
 defineProps<{
-  domain:    'atmosphere' | 'ocean' | 'seismic' | 'insurance'
+  domain:    'insurance'
   title:     string
   subtitle:  string
   // Hero counters: 3-4 tiles at the top. Same shape as ocean dashboard.
@@ -13,11 +13,8 @@ defineProps<{
   // Live-data sources to credit in the footer.
   sources:   string[]
   // Optional override for the small uppercase eyebrow above the title.
-  // Defaults to "Research · <domain>" for backwards compat with the
-  // three Phase-9.11 research dashboards.
   eyebrow?:  string
-  // Optional override for the provenance footer copy. Defaults to the
-  // research-dashboard wording.
+  // Optional override for the provenance footer copy.
   footnote?: string
 }>()
 </script>

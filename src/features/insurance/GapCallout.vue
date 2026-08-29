@@ -1,11 +1,13 @@
 <script setup lang="ts">
 // TerraWatch — Phase 9.11: shared "DataSnake fleet would close this gap"
-// callout. Designed to be the credibility anchor on each research dashboard:
-// honestly states what public-data baseline can and can't see, and what
-// the proprietary fleet would resolve. Investor-friendly but not hypey.
+// callout. Credibility anchor: honestly states what public-data baseline
+// can and can't see, and what the proprietary fleet would resolve.
+// Investor-friendly but not hypey. Originally shared across the research
+// dashboards; now used by Insurance only (Phase 11 removed the research
+// section).
 
 defineProps<{
-  domain:    'atmosphere' | 'ocean' | 'seismic' | 'insurance'
+  domain:    'insurance'
   headline:  string
   body:      string
   // Stat row: one or more (label, value, unit?) tuples. Renders as a
@@ -27,21 +29,9 @@ defineProps<{
                   text-accent flex items-center justify-center mt-0.5">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"
              stroke-linecap="round" stroke-linejoin="round" class="w-5 h-5" aria-hidden="true">
-          <template v-if="domain === 'atmosphere'">
-            <path d="M3 12c0-3 2-5 5-5h2M21 12c0 3-2 5-5 5h-2"/>
-            <path d="M8 12h8M12 8v8"/>
-          </template>
-          <template v-else-if="domain === 'ocean'">
-            <path d="M2 8c2-2 4-2 6 0s4 2 6 0 4-2 6 0M2 14c2-2 4-2 6 0s4 2 6 0 4-2 6 0M2 20c2-2 4-2 6 0s4 2 6 0 4-2 6 0"/>
-          </template>
-          <template v-else-if="domain === 'insurance'">
-            <!-- Shield + dollar glyph for insurance/underwriting framing -->
-            <path d="M12 3 4 6v6c0 5 4 8 8 9 4-1 8-4 8-9V6Z"/>
-            <path d="M12 8v8M9.5 10h4a1.5 1.5 0 0 1 0 3h-3a1.5 1.5 0 0 0 0 3h4"/>
-          </template>
-          <template v-else>
-            <path d="M3 12h4l2-7 4 14 2-7h6"/>
-          </template>
+          <!-- Shield + dollar glyph for insurance/underwriting framing -->
+          <path d="M12 3 4 6v6c0 5 4 8 8 9 4-1 8-4 8-9V6Z"/>
+          <path d="M12 8v8M9.5 10h4a1.5 1.5 0 0 1 0 3h-3a1.5 1.5 0 0 0 0 3h4"/>
         </svg>
       </div>
       <div class="flex-1 min-w-0">

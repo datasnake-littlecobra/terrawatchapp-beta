@@ -41,14 +41,6 @@ const routes: RouteRecordRaw[] = [
   { path: '/blog',           name: 'blog',           component: () => import('@/features/blog/BlogIndexView.vue') },
   { path: '/blog/:slug',     name: 'blog-post',      component: () => import('@/features/blog/BlogPostView.vue') },
 
-  // Phase 9.11 — research / investor analytics dashboards. Public-readable
-  // (RPCs are anon-grantable). The DataSnake gap callouts on each page
-  // are the investor narrative anchor.
-  { path: '/research/atmosphere',     name: 'research-atmosphere',     component: () => import('@/features/research/AtmosphereDashboardView.vue') },
-  { path: '/research/ocean',          name: 'research-ocean',          component: () => import('@/features/research/OceanResearchDashboardView.vue') },
-  { path: '/research/seismic-hazard', name: 'research-seismic-hazard', component: () => import('@/features/research/SeismicHazardDashboardView.vue') },
-  { path: '/research',                redirect: '/research/atmosphere' },
-
   // Phase 9.12 — Insurance MVP. Public dashboard at /insurance — partner
   // demo + LinkedIn / X share asset. FEMA NRI county-level data plus
   // live cross-reference to the events pipeline.
@@ -81,15 +73,11 @@ const routes: RouteRecordRaw[] = [
   { path: '/weather-intelligence/map',              name: 'wi-map',         component: () => import('@/features/weather-intelligence/MapView.vue') },
   { path: '/weather-intelligence/glossary',          name: 'wi-glossary',    component: () => import('@/features/weather-intelligence/GlossaryView.vue') },
 
-  // Phase 10.0 — AI/ML Intelligence section. Public-facing showcase for
-  // all 7 ranked models: training dataset, benchmark accuracy, synthetic
-  // inference results, and full input→model→output audit trail.
-  { path: '/ai-models',                    name: 'ai-hub',       component: () => import('@/features/ai-models/ModelHubView.vue') },
-  { path: '/ai-models/pipeline-detection', name: 'ai-pipeline',  component: () => import('@/features/ai-models/PipelineDetectionView.vue') },
-  { path: '/ai-models/oil-spill',          name: 'ai-oil-spill', component: () => import('@/features/ai-models/OilSpillView.vue') },
-  { path: '/ai-models/seismic-insar',      name: 'ai-seismic',   component: () => import('@/features/ai-models/SeismicInSARView.vue') },
-  { path: '/ai-models/marine-biota',       name: 'ai-biota',     component: () => import('@/features/ai-models/MarineBiotaView.vue') },
-  { path: '/ai-models/glossary',           name: 'ai-glossary',  component: () => import('@/features/ai-models/AIGlossaryView.vue') },
+  // Phase 11 — Location Risk vertical. Search a place, see its historical
+  // disaster record (earthquakes, wildfires, floods, storms, volcanoes)
+  // pulled from the existing events_near RPC. Replaces the synthetic-demo
+  // AI Models section — this is a real feature over real ingested data.
+  { path: '/location-risk', name: 'location-risk', component: () => import('@/features/location-risk/LocationRiskView.vue') },
 
   // Phase 9.8 — admin signup is OUTSIDE the gated /admin/* layout because
   // a non-admin user must be able to reach it (that's the whole point).
