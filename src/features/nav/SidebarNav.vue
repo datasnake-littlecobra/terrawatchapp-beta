@@ -4,9 +4,10 @@ import { RouterLink, useRoute } from 'vue-router'
 import { useSidebar } from '@/composables/useSidebar'
 import { useAuthStore } from '@/stores/auth'
 
-const route   = useRoute()
-const sidebar = useSidebar()
-const auth    = useAuthStore()
+const route      = useRoute()
+const sidebar    = useSidebar()
+const auth       = useAuthStore()
+const appVersion = __APP_VERSION__
 
 function isActive(path: string) {
   return route.path === path || route.path.startsWith(path + '/')
@@ -45,19 +46,11 @@ const sections = computed<NavSection[]>(() => {
       ],
     },
     {
-      label: 'Research',
-      items: [
-        { to: '/research/atmosphere',     icon: 'sparkle', label: 'Atmosphere' },
-        { to: '/research/ocean',          icon: 'waves',   label: 'Ocean' },
-        { to: '/research/seismic-hazard', icon: 'pen',     label: 'Seismic hazard' },
-      ],
-    },
-    {
       label: 'Verticals',
       items: [
         { to: '/insurance',            icon: 'shield',  label: 'Insurance' },
         { to: '/weather-intelligence', icon: 'compass', label: 'Weather Intelligence' },
-        { to: '/ai-models',            icon: 'brain',   label: 'AI Models' },
+        { to: '/location-risk',        icon: 'map-pin', label: 'Location Risk' },
       ],
     },
     {
@@ -193,10 +186,6 @@ const sections = computed<NavSection[]>(() => {
                   <circle cx="12" cy="12" r="3"/>
                   <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1Z"/>
                 </template>
-                <template v-else-if="item.icon === 'brain'">
-                  <path d="M9.5 2a2.5 2.5 0 0 1 5 0 4 4 0 0 1 4 4 3.5 3.5 0 0 1 0 7H17a4 4 0 0 1-4 4v2M9.5 2a4 4 0 0 0-4 4 3.5 3.5 0 0 0 0 7H7a4 4 0 0 0 4 4v2"/>
-                  <circle cx="12" cy="19" r="1"/>
-                </template>
               </svg>
               <span class="flex-1">{{ item.label }}</span>
               <span
@@ -228,6 +217,7 @@ const sections = computed<NavSection[]>(() => {
              stroke-linecap="round" class="w-4 h-4"><path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4M10 17l5-5-5-5M15 12H3"/></svg>
         Sign in
       </RouterLink>
+      <p class="text-ink-muted/40 text-[10px] mt-3">TerraWatch v{{ appVersion }}</p>
     </div>
   </nav>
 </template>
