@@ -4,9 +4,10 @@ import { RouterLink, useRoute } from 'vue-router'
 import { useSidebar } from '@/composables/useSidebar'
 import { useAuthStore } from '@/stores/auth'
 
-const route   = useRoute()
-const sidebar = useSidebar()
-const auth    = useAuthStore()
+const route      = useRoute()
+const sidebar    = useSidebar()
+const auth       = useAuthStore()
+const appVersion = __APP_VERSION__
 
 function isActive(path: string) {
   return route.path === path || route.path.startsWith(path + '/')
@@ -216,6 +217,7 @@ const sections = computed<NavSection[]>(() => {
              stroke-linecap="round" class="w-4 h-4"><path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4M10 17l5-5-5-5M15 12H3"/></svg>
         Sign in
       </RouterLink>
+      <p class="text-ink-muted/40 text-[10px] mt-3">TerraWatch v{{ appVersion }}</p>
     </div>
   </nav>
 </template>
