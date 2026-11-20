@@ -88,7 +88,7 @@ const sections = computed<NavSection[]>(() => {
     <!-- Logo / close row -->
     <div class="flex items-center justify-between px-5 pt-5 pb-4">
       <RouterLink to="/" class="flex items-center gap-2" @click="sidebar.close()">
-        <span class="text-accent text-xs tracking-widest uppercase font-semibold">TerraWatch</span>
+        <span class="text-accent text-xs tracking-widest uppercase font-semibold">Hyperwatch</span>
       </RouterLink>
       <!-- close button: only on mobile -->
       <button
