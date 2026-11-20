@@ -67,6 +67,17 @@ Attaching a custom domain to a Cloudflare Worker requires the zone (domain) to b
 
 Every push to a non-production branch gets a preview URL automatically (shown on the Worker's **Deployments** tab). Useful for review before merging into `main`.
 
+### Confirming a push actually deployed
+
+The GitHub ↔ Cloudflare Git integration has silently disconnected before (discovered Nov 2026, after ~4 months of pushes that never deployed — Cloudflare's dashboard still showed an old build as "active" with no error). `git push` succeeding only proves GitHub received the commit; it says nothing about whether Cloudflare built it. Don't assume a deploy happened — verify it:
+
+```bash
+gh api "repos/datasnake-littlecobra/terrawatchapp-beta/deployments?per_page=5" \
+  | jq -r '.[] | "\(.sha[0:10]) \(.environment) \(.created_at) \(.ref)"'
+```
+
+Check that the top row's SHA matches (or descends from) the commit you just pushed, within a minute or two of pushing. No new row appearing means the integration is broken again — check **Worker → Settings → Builds** for a "disconnected from your Git account" banner, and reconnect from a **desktop browser** (the GitHub OAuth popup this requires is unreliable on mobile).
+
 ## Supabase (auth + bookmarks + Ask Terra)
 
 The app reads Supabase credentials from two build-time environment variables:
