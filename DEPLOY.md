@@ -4,7 +4,7 @@
 
 - **Frontend**: Cloudflare Workers (Static Assets) — auto-builds on every push via the Cloudflare ↔ GitHub integration. Wrangler config lives at `wrangler.jsonc`.
 - **Backend**: Supabase — Postgres + Auth + Edge Functions (`ask-terra`).
-- **Domain**: `terrawatchapp.com` registered at Hostinger's domain registrar. DNS is delegated to Cloudflare so the custom domain can attach to the Worker.
+- **Domain**: `terrawatchapp.com` registered at Hostinger's domain registrar. DNS is delegated to Cloudflare so the custom domain can attach to the Worker. `hyperlocalwatch.com` is also attached to the same Worker as a second custom domain.
 
 There is **no Hostinger web-hosting plan** involved. The Hostinger account is used only for domain registration.
 
@@ -19,7 +19,7 @@ There is **no Hostinger web-hosting plan** involved. The Hostinger account is us
    - **Build command**: `npm run build`
    - **Build output directory**: `dist`
    - **Deploy command**: `npx wrangler deploy` (auto-set; reads `wrangler.jsonc`).
-   - **Production branch**: `main` (or `claude/terrawatch-redesign-dMM0l` until merged).
+   - **Production branch**: `main`. Only commits that land on `main` deploy to the production domains (`terrawatchapp.com`, `hyperlocalwatch.com`) — pushing directly to a feature branch only produces a preview deployment. Work happens on `claude/terrawatch-redesign-dMM0l` and ships to production via a PR merged into `main` (see "Confirming a push actually deployed" below for the current automated flow).
 3. **Add env vars** — Worker → **Settings → Variables and Secrets → Add**:
 
    | Name | Value | Type | Notes |
@@ -67,16 +67,33 @@ Attaching a custom domain to a Cloudflare Worker requires the zone (domain) to b
 
 Every push to a non-production branch gets a preview URL automatically (shown on the Worker's **Deployments** tab). Useful for review before merging into `main`.
 
+### Shipping a change to production (current flow, as of Nov 2026)
+
+1. Commit and push to `claude/terrawatch-redesign-dMM0l`.
+2. Open a PR into `main`:
+   ```bash
+   gh api repos/datasnake-littlecobra/terrawatchapp-beta/pulls \
+     -f title='<summary>' -f head='claude/terrawatch-redesign-dMM0l' -f base='main' -f body='<notes>'
+   ```
+3. Merge it immediately (no review gate on this solo project — `gh pr merge` can hit GitHub's GraphQL endpoint, which this session's proxy blocks, so use REST directly):
+   ```bash
+   gh api -X PUT repos/datasnake-littlecobra/terrawatchapp-beta/pulls/<number>/merge -f merge_method=merge
+   ```
+4. Verify the deploy actually landed (see below) — do not assume it did just because the merge succeeded.
+
 ### Confirming a push actually deployed
 
-The GitHub ↔ Cloudflare Git integration has silently disconnected before (discovered Nov 2026, after ~4 months of pushes that never deployed — Cloudflare's dashboard still showed an old build as "active" with no error). `git push` succeeding only proves GitHub received the commit; it says nothing about whether Cloudflare built it. Don't assume a deploy happened — verify it:
+The GitHub ↔ Cloudflare Git integration has silently disconnected before (discovered Nov 2026, after ~4 months of pushes that never deployed — Cloudflare's dashboard still showed an old build as "active" with no error). `git push` or a merged PR succeeding only proves GitHub has the commit; it says nothing about whether Cloudflare built it.
+
+GitHub's Deployments API (`/repos/.../deployments`) is **not** a reliable signal for this project — it stopped recording entries around July 2026 even for merges that *did* go live, so a missing row there doesn't mean the deploy failed. Instead, check the live bundle directly:
 
 ```bash
-gh api "repos/datasnake-littlecobra/terrawatchapp-beta/deployments?per_page=5" \
-  | jq -r '.[] | "\(.sha[0:10]) \(.environment) \(.created_at) \(.ref)"'
+curl -sS https://hyperlocalwatch.com/ | grep -o 'src="/assets/index-[^"]*\.js"'
+# then fetch that JS file and grep for something from the change you just shipped,
+# e.g. a string literal added in the commit, or the bumped package.json version
 ```
 
-Check that the top row's SHA matches (or descends from) the commit you just pushed, within a minute or two of pushing. No new row appearing means the integration is broken again — check **Worker → Settings → Builds** for a "disconnected from your Git account" banner, and reconnect from a **desktop browser** (the GitHub OAuth popup this requires is unreliable on mobile).
+If the expected string isn't in the fetched bundle within a minute or two of merging, the integration broke again — check **Worker → Settings → Builds** for a "disconnected from your Git account" banner, and reconnect from a **desktop browser** (the GitHub OAuth popup this requires is unreliable on mobile). Also double-check **Production branch** is still set to `main` — reconnecting can silently reset it.
 
 ## Supabase (auth + bookmarks + Ask Terra)
 
